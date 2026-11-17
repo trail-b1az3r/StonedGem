@@ -1,6 +1,8 @@
 Build `stonedgem`, a new, modular browser base written primarily in Rust, Z#, and D. It will provide the foundation for OyNIx v5.4.0 and potentially PowerOyNix. Treat `stonedgem` as the browser platform—not just a UI rewrite. 
 -# also since you must use Z#, make a sytaxt extention, and major upgrade call this upgraded lang Z#++, that makes Z#++ (zharp) useful in this project
 
+> **Decisions (2026-11-17):** licence **MIT** (matches OyNIx); C++ code targets **C++23**; **Z#** means [Sam-astro's Z-Sharp](https://github.com/sam-astro/Z-Sharp) (MIT). OyNIx migrates onto StonedGem gradually — see `docs/MIGRATION.md`.
+
 ## Goals and constraints
 
 - Use **Iced** for the browser’s native UI and as the foundation for a custom, reusable browser UI framework.
@@ -35,7 +37,7 @@ Investigate support for relevant WebExtension APIs and Manifest V2 and V3, inclu
 - Extensions that need migration to Slint-based native interfaces.
 - Extensions or APIs that are unsupported.
 - Engine capabilities that remain unavailable or incomplete.
-- you may create your own engine using c++ (23 or newer), rust, TS, minimal python, vulican, Z#, D, and, a bit of rust, use must mainly use, D, rust, c++ (24 or newer), and Z#
+- you may create your own engine using C++23, rust, TS, minimal python, vulkan, Z#, D, and, a bit of rust, use must mainly use, D, rust, C++23, and Z#
 
 Do not claim full MV2 or MV3 support unless tests demonstrate it.
 
