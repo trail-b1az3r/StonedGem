@@ -1,0 +1,11 @@
+[package]
+name = "stonedgem-url"
+description = "Address-bar logic for StonedGem browsers: turning typed text into URLs or searches, !bangs, display forms, and removing tracking parameters without touching sign-in flows."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+url.workspace = true
