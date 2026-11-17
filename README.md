@@ -23,6 +23,7 @@ Nothing is described as working until its code and tests show it.
 - [Migration plan](docs/MIGRATION.md) — how OyNIx moves over, phase by phase
 - [Compatibility](docs/COMPATIBILITY.md) — what works, what's planned, what isn't supported
 - [Z# and Z#++](docs/ZSHARP.md)
+- [GemSig plan](docs/GEMSIG-PLAN.md) — signature format 3 for `.poweroynix` (proposal)
 - [The original brief](prompt.md)
 
 ## Building
