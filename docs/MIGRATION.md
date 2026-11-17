@@ -43,7 +43,13 @@ out and packages with QML panels are refused with a clear message.
 QML checking itself (`qmlcheck.rs`) stays in OyNIx until panels move to
 Slint in phase 6.
 
-## Phase 4 — engine spike
+## Phase 4 — engine spike (spike ✅, site survey to do)
+
+Done: `stonedgem-engine` renders headless with Servo 0.8, every request goes
+through `stonedgem-blocker`, and extension scripts, styles and element
+hiding work; see [ENGINE-SPIKE.md](ENGINE-SPIKE.md). Still to do: the
+site-compatibility survey below, which needs a desktop machine.
+
 
 `stonedgem-engine` wraps Servo behind StonedGem's own types. A small test
 app opens a window, loads pages, routes every request through
