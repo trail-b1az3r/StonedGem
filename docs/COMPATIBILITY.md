@@ -14,7 +14,7 @@ Legend: **Works** · **Planned** (phase in [MIGRATION.md](MIGRATION.md)) ·
 | Address bar: URL vs search, `!bangs`, display, tracking removal | **Works** (`stonedgem-url`) |
 | Saved passwords, CSV import, Firefox import | **Works** (`stonedgem-vault`); filling forms: Planned (6) |
 | `.poweroynix` signature checking | **Works** (`stonedgem-poweroynix`) |
-| Content blocker and filter lists | Planned (2, 4) |
+| Content blocker and filter lists | **Works** (`stonedgem-blocker`); hooking it into Servo's requests: Planned (4) |
 | History, bookmarks, reading list, sessions | Planned (3) |
 | Rendering web pages | Unknown — Servo spike (4) |
 | Tabs, tree tabs, start page, settings, help | Planned (5) |

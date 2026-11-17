@@ -13,6 +13,8 @@ services already moved out of OyNIx — and OyNIx uses them:
 | [`stonedgem-url`](crates/stonedgem-url) | Address-bar logic: typed text → URL or search, `!bangs`, display forms, tracking-parameter removal that never touches sign-ins |
 | [`stonedgem-poweroynix`](crates/stonedgem-poweroynix) | `.poweroynix` signature checking (Ed25519 over SHA3-256 file hashes) |
 | [`stonedgem-vault`](crates/stonedgem-vault) | Encrypted password store, CSV import, Firefox passwords and bookmarks |
+| [`stonedgem-profile`](crates/stonedgem-profile) | Profile folders (config, data, cache, filters) under the product's app name |
+| [`stonedgem-blocker`](crates/stonedgem-blocker) | Content blocker: Adblock/uBlock filter lists, element hiding, the list catalogue, `network.ts` rules |
 
 The engine, the chrome and the extension runtime are planned, not built.
 Nothing is described as working until its code and tests show it.

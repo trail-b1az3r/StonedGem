@@ -18,13 +18,16 @@ Moved from OyNIx into crates, with their tests:
 OyNIx now depends on these crates (a git dependency pinned to a commit)
 and its old modules are thin wrappers that supply OyNIx's folders and keys.
 
-## Phase 2 — profile, blocker, network rules
+## Phase 2 — profile, blocker, network rules ✅
 
-- `stonedgem-profile`: profile folders and settings storage, so services
-  stop reaching for OyNIx's `paths`.
-- `stonedgem-blocker`: the filter-list engine (`blocker.rs`,
-  `filterlists.rs`) and `network.ts` rules (`netrules.rs`), with an API that
-  takes the request and returns a decision, ready for any engine.
+| Crate | From OyNIx | What it is |
+|---|---|---|
+| `stonedgem-profile` | `src/core/paths.rs` | profile folders under an app name the product sets (`set_app`); OyNIx sets `oynix`, so existing profiles stay put |
+| `stonedgem-blocker` | `src/core/blocker.rs`, `filterlists.rs`, `netrules.rs` | the filter-list engine, the list catalogue and `network.ts` runtime rules; `should_block(request)` returns a decision, ready for any engine |
+
+What stays with the product: which extension filter files are enabled
+(passed in with `set_extension_filters`) and the HTTP client behind
+`network.ts`'s cross-origin fetch.
 
 ## Phase 3 — library and extension packages
 
