@@ -1,0 +1,19 @@
+[package]
+name = "stonedgem-extensions"
+description = "Extension packages for StonedGem browsers: Chrome/Firefox WebExtension conversion (MV2/MV3, CRX, XPI), the native .oynix format, verified .poweroynix packages, TypeScript/TSX compilation and widgets."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+base64 = "0.23.1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+oxc = { version = "0.158", features = ["transformer", "codegen", "semantic"] }
+pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
+stonedgem-profile = { path = "../stonedgem-profile" }
+stonedgem-poweroynix = { path = "../stonedgem-poweroynix" }
