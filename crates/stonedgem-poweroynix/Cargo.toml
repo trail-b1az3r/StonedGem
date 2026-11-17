@@ -1,6 +1,6 @@
 [package]
 name = "stonedgem-poweroynix"
-description = "Verification for .poweroynix packages: Ed25519 signatures over SHA3-256 (format 2) or SHA-256 (format 1) hashes of every file."
+description = "Verification for .poweroynix packages: GemSig (format 3: Ed25519 over a SHA3-512 summary of SHA3-512 file hashes, with GemPrint fingerprints); formats 2 (SHA3-256) and 1 (SHA-256) still verify."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,3 +12,4 @@ ring.workspace = true
 sha2.workspace = true
 sha3.workspace = true
 serde_json.workspace = true
+num-bigint = "0.4"

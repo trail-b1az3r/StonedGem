@@ -1,0 +1,14 @@
+[package]
+name = "stonedgem-library"
+description = "History, bookmarks (with Netscape HTML import/export), reading list and recently closed tabs for StonedGem browsers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+stonedgem-url = { path = "../stonedgem-url" }
+stonedgem-profile = { path = "../stonedgem-profile" }

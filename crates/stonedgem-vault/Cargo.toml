@@ -17,4 +17,5 @@ cbc = "0.1"
 des = "0.8"
 sha1 = "0.10"
 base64 = "0.23"
-rusqlite = { version = "0.40", features = ["bundled"] }
+# 0.38: the version Servo (servo-net) links; two sqlite3 links cannot coexist.
+rusqlite = { version = "0.38", features = ["bundled"] }

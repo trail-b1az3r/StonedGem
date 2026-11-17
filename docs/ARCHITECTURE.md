@@ -13,8 +13,8 @@ It separates what **exists and is tested** from what is **planned**.
 | Layer | Status |
 |---|---|
 | Engine-independent services (address bar, `.poweroynix` verification, password vault, Firefox import) | **Exists**, moved from OyNIx with their tests. OyNIx uses these crates. |
-| Engine binding (Servo) | Planned — phase 4 of [MIGRATION.md](MIGRATION.md). |
-| Iced browser chrome | Planned — phase 5. |
+| Engine binding (Servo) | Spike working, headless — `stonedgem-engine`; see [ENGINE-SPIKE.md](ENGINE-SPIKE.md). |
+| Iced browser chrome | Working — `stonedgem-chrome` (`stonedgem-browser`): tabs, address bar, menu, History, Bookmarks, Settings, find in page, light/dark Material colours. |
 | Extension runtime | Planned — phase 6. |
 | Slint extension UI | Planned — phase 6. |
 | Z#++ scripting | Planned — phase 7. See [ZSHARP.md](ZSHARP.md). |
@@ -42,7 +42,7 @@ described as working until its crate and tests say so.
            │                          │
    ┌───────▼────────┐        ┌────────▼─────────────────────────────────────────┐
    │ stonedgem-     │        │ services: url ✓ · poweroynix ✓ · vault ✓ ·       │
-   │ engine (Servo) │◄──────►│ blocker ✓ · profile ✓ · library (history, bkmk) │
+   │ engine (Servo) │◄──────►│ blocker ✓ · profile ✓ · library ✓ · extensions ✓ │
    └───────┬────────┘        └──────────────────────────────────────────────────┘
            │
    ┌───────▼─────────────────────────────────────────┐

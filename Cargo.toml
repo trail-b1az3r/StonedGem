@@ -1,6 +1,20 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+# The Servo engine is large and slow to build (see docs/ENGINE-SPIKE.md);
+# plain `cargo build`/`cargo test` leave it out. Build it with
+# `cargo test -p stonedgem-engine`, and the window (stonedgem-chrome, on the
+# engine) with `cargo run -p stonedgem-chrome`.
+default-members = [
+    "crates/stonedgem-url",
+    "crates/stonedgem-poweroynix",
+    "crates/stonedgem-vault",
+    "crates/stonedgem-profile",
+    "crates/stonedgem-blocker",
+    "crates/stonedgem-library",
+    "crates/stonedgem-extensions",
+    "crates/stonedgem-theme",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -16,3 +30,7 @@ serde_json = "1"
 ring = "0.17"
 sha2 = "0.11"
 sha3 = "0.10"
+
+# Servo makes debug builds huge; keep debug info for our crates only.
+[profile.dev.package."*"]
+debug = false

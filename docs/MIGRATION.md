@@ -29,14 +29,27 @@ What stays with the product: which extension filter files are enabled
 (passed in with `set_extension_filters`) and the HTTP client behind
 `network.ts`'s cross-origin fetch.
 
-## Phase 3 — library and extension packages
+## Phase 3 — library and extension packages ✅
 
-- `stonedgem-library`: history, bookmarks, reading list, sessions.
-- `stonedgem-extensions`: the extension registry, `.oynix`/`.poweroynix`
-  packaging, TypeScript compilation (oxc), widget runtime.
-  QML panel checking stays in OyNIx until panels move to Slint.
+| Crate | From OyNIx | What it is |
+|---|---|---|
+| `stonedgem-library` | `src/core/library.rs` | history, bookmarks (Netscape HTML import/export), reading list, recently closed tabs |
+| `stonedgem-extensions` | `src/core/extensions.rs`, `tscompile.rs`, `material.rs` | the extension registry and converters (Chrome/Firefox MV2/MV3, `.crx`, `.xpi`, `.oynix`, `.poweroynix`), TypeScript/TSX compilation (oxc), widgets, network.ts pages, Material schemes |
 
-## Phase 4 — engine spike
+The product supplies a `Host` at start-up: its name (shown as who verified
+built-ins), its trusted `.poweroynix` keys, a QML checker and the engine's
+page-channel script. A browser without a QML runtime leaves the checker
+out and packages with QML panels are refused with a clear message.
+QML checking itself (`qmlcheck.rs`) stays in OyNIx until panels move to
+Slint in phase 6.
+
+## Phase 4 — engine spike (spike ✅, site survey to do)
+
+Done: `stonedgem-engine` renders headless with Servo 0.8, every request goes
+through `stonedgem-blocker`, and extension scripts, styles and element
+hiding work; see [ENGINE-SPIKE.md](ENGINE-SPIKE.md). Still to do: the
+site-compatibility survey below, which needs a desktop machine.
+
 
 `stonedgem-engine` wraps Servo behind StonedGem's own types. A small test
 app opens a window, loads pages, routes every request through
@@ -44,7 +57,34 @@ app opens a window, loads pages, routes every request through
 measure site compatibility on a fixed list of sites before going further;
 if it's too poor, WPE WebKit is evaluated against the same list.
 
-## Phase 5 — Iced chrome
+## Phase 5 — Iced chrome (window, menu, History, Bookmarks, Settings, Find ✅)
+
+`stonedgem-chrome` builds `stonedgem-browser`, drawn entirely with Iced in
+OyNIx's Material 3 colours (`stonedgem-theme`, light or dark, six accents):
+
+- tabs, an address pill (`stonedgem-url`: addresses, searches, `!bangs`;
+  "Not secure" on plain http), back/forward/reload/home, a ☆ bookmark star,
+  the count of blocked requests and a ⋮ menu;
+- the page: Servo's frames by readback, with mouse, wheel and keys;
+- **History** (`stonedgem://history`, Ctrl+H): visits recorded by
+  `stonedgem-library`, searchable, removable, clearable;
+- **Bookmarks** (`stonedgem://bookmarks`, Ctrl+Shift+O, Ctrl+D to add);
+- **Settings** (`stonedgem://settings`, Ctrl+,): dark/light, accent colour,
+  search engine, home page, ad/tracker blocking and element hiding; saved
+  in the profile as `browser.json`;
+- **Find in page** (Ctrl+F): "3 of 58", ↑/↓, highlights cleared on close.
+
+Checked under Xvfb with `crates/stonedgem-chrome/xvfb-check.sh`:
+screenshots of [the page](screenshots/browser-wikipedia.png),
+[find](screenshots/browser-find.png), [the menu](screenshots/browser-menu.png),
+[History](screenshots/browser-history.png),
+[Settings](screenshots/browser-settings.png) and
+[Settings, light](screenshots/browser-settings-light.png).
+
+Still to do in this phase: downloads (Servo's download support needs
+checking first), a context menu, zoom, restoring tabs on start, and the
+oynix-next package.
+
 
 `stonedgem-chrome`: window, tabs, address bar (using `stonedgem-url`),
 menus, settings and start page, drawing pages from the engine

@@ -1,0 +1,24 @@
+[package]
+name = "stonedgem-chrome"
+description = "StonedGem's browser window (Iced): tabs, address bar and the page view drawn from stonedgem-engine."
+version.workspace = true
+edition.workspace = true
+rust-version = "1.88"
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "stonedgem-browser"
+path = "src/main.rs"
+
+[dependencies]
+# CPU rendering (tiny-skia) keeps Iced off the GL context Servo draws with.
+iced = { version = "0.14", default-features = false, features = ["tiny-skia", "x11", "wayland", "image-without-codecs", "smol", "thread-pool", "linux-theme-detection"] }
+stonedgem-engine = { path = "../stonedgem-engine" }
+stonedgem-url = { path = "../stonedgem-url" }
+stonedgem-blocker = { path = "../stonedgem-blocker" }
+stonedgem-library = { path = "../stonedgem-library" }
+stonedgem-profile = { path = "../stonedgem-profile" }
+stonedgem-theme = { path = "../stonedgem-theme" }
+serde = { workspace = true }
+serde_json = { workspace = true }
