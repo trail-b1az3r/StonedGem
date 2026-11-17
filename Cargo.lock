@@ -7066,6 +7066,7 @@ dependencies = [
 name = "stonedgem-poweroynix"
 version = "0.1.0"
 dependencies = [
+ "num-bigint 0.4.8",
  "ring",
  "serde_json",
  "sha2 0.11.1",

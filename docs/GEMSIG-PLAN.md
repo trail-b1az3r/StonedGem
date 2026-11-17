@@ -1,8 +1,21 @@
 # Plan: GemSig, signature format 3 for `.poweroynix`
 
-Status: **plan only**. Nothing here is implemented. Format 2 (Ed25519 over
-SHA3-256 file hashes) stays the format OyNIx checks until this is agreed,
-built and tested.
+Status: **implemented** (items 1–4 of “Work” below) in
+`stonedgem-poweroynix` (`verify_info`, `gemprint`) and `tools/poweroynix.py`;
+`sign` writes format 3 by default. Item 5, the ML-DSA co-signature, is still
+waiting for a reviewed Rust implementation.
+
+As built:
+
+- The message is `OyNIx GemSig v3\n`, `id: …\n`, `version: …\n`
+  (oynix.json's `id`, or `name`, and `version`), `commit: …\n`, then
+  `<SHA3-512 hex>  <path>\n` per file. Ed25519 signs its SHA3-512 summary.
+- `oynix.sig` also states `id` and `version`; if they differ from oynix.json
+  the package is refused as “made for X, not Y”.
+- GemPrint is the formula over exact big integers (see
+  `crates/stonedgem-poweroynix/src/gemprint.rs` for every step), shown as
+  four hex groups. Fixed test vectors pin it, and the tests check the Rust
+  and Python versions give the same value for the same package.
 
 ## What was asked
 

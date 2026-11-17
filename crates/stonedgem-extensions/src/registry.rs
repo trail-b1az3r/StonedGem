@@ -90,6 +90,9 @@ pub struct Entry {
     pub power: bool,
     /// Who verified it ("OyNIx" for built-ins).
     pub verified_by: String,
+    /// GemPrint of a GemSig (format 3) signature, e.g. `a1b2-c3d4-e5f6-0718`:
+    /// for comparing packages at a glance, never for deciding trust.
+    pub gemprint: String,
 }
 
 impl Entry {
@@ -141,6 +144,7 @@ pub fn load() -> Vec<Entry> {
         let old_builtin = entry.builtin;
         let old_power = entry.power;
         let old_verified_by = entry.verified_by.clone();
+        let old_gemprint = entry.gemprint.clone();
         let old_installed = entry.installed;
         let old_first_run = entry.first_run;
         let old_id = entry.id.clone();
@@ -154,6 +158,7 @@ pub fn load() -> Vec<Entry> {
                 entry.builtin = old_builtin;
                 entry.power = old_power;
                 entry.verified_by = old_verified_by;
+                entry.gemprint = old_gemprint;
                 entry.installed = old_installed;
                 entry.first_run = old_first_run;
                 migrated = true;
@@ -1545,7 +1550,13 @@ fn install_inner(source: &Path, staging: &Path, base: &Path, list: &mut Vec<Entr
     let power = ext == "poweroynix" || stonedgem_poweroynix::is_power_dir(&dir);
     if power {
         // Checked before anything below rewrites a file.
-        e.verified_by = if builtin { host::name().into() } else { host::verify_power(&dir)? };
+        if builtin {
+            e.verified_by = host::name().into();
+        } else {
+            let v = host::verify_power(&dir)?;
+            e.verified_by = v.by;
+            e.gemprint = v.gemprint.unwrap_or_default();
+        }
         if !dir.join("oynix.json").exists() {
             return Err("a .poweroynix needs oynix.json, code.ts and content.css, like any OyNIx extension".into());
         }

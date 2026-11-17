@@ -41,8 +41,8 @@ pub(crate) fn name() -> &'static str {
     get().name
 }
 
-pub(crate) fn verify_power(dir: &Path) -> Result<String, String> {
-    stonedgem_poweroynix::verify(dir, get().trusted_keys)
+pub(crate) fn verify_power(dir: &Path) -> Result<stonedgem_poweroynix::Verified, String> {
+    stonedgem_poweroynix::verify_info(dir, get().trusted_keys)
 }
 
 pub(crate) fn check_qml(qml: &str) -> Result<(), String> {

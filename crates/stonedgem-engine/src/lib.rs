@@ -17,9 +17,11 @@ use std::time::{Duration, Instant};
 
 use servo::{
     EventLoopWaker, JSValue, LoadStatus, Preferences, RenderingContext, Servo, ServoBuilder, SoftwareRenderingContext,
-    UserContentManager, UserScript, UserStyleSheet, WebResourceLoad, WebResourceResponse, WebView, WebViewBuilder,
+    UserContentManager, UserScript, WebResourceLoad, WebResourceResponse, WebView, WebViewBuilder,
     WebViewDelegate,
 };
+
+use servo::user_contents::UserStyleSheet;
 
 pub use servo::JSValue as Value;
 
@@ -209,6 +211,7 @@ impl Page {
         if !engine.wait(timeout, || out.borrow().is_some()) {
             return Err("timed out".into());
         }
-        out.borrow_mut().take().unwrap()
+        let v = out.borrow_mut().take();
+        v.unwrap()
     }
 }
