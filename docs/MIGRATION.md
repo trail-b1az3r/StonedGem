@@ -57,18 +57,33 @@ app opens a window, loads pages, routes every request through
 measure site compatibility on a fixed list of sites before going further;
 if it's too poor, WPE WebKit is evaluated against the same list.
 
-## Phase 5 — Iced chrome (first window ✅)
+## Phase 5 — Iced chrome (window, menu, History, Bookmarks, Settings, Find ✅)
 
-Done so far: `stonedgem-chrome` builds `stonedgem-browser`, an Iced window
-with tabs, an address bar (`stonedgem-url`: addresses, searches, `!bangs`),
-back/forward/reload, a start page and a blocked-request count, drawing
-Servo's frames by readback. Mouse, wheel and keyboard reach the page;
-Ctrl+T/W/L/R, Ctrl+Tab and Alt+←/→ work. Checked under Xvfb: typing an
-address, a second tab, Wikipedia rendering and scrolling
-([screenshot](screenshots/browser-wikipedia.png)).
+`stonedgem-chrome` builds `stonedgem-browser`, drawn entirely with Iced in
+OyNIx's Material 3 colours (`stonedgem-theme`, light or dark, six accents):
 
-Still to do in this phase: menus, settings, history and bookmarks
-(`stonedgem-library`), downloads, find-in-page, the oynix-next package.
+- tabs, an address pill (`stonedgem-url`: addresses, searches, `!bangs`;
+  "Not secure" on plain http), back/forward/reload/home, a ☆ bookmark star,
+  the count of blocked requests and a ⋮ menu;
+- the page: Servo's frames by readback, with mouse, wheel and keys;
+- **History** (`stonedgem://history`, Ctrl+H): visits recorded by
+  `stonedgem-library`, searchable, removable, clearable;
+- **Bookmarks** (`stonedgem://bookmarks`, Ctrl+Shift+O, Ctrl+D to add);
+- **Settings** (`stonedgem://settings`, Ctrl+,): dark/light, accent colour,
+  search engine, home page, ad/tracker blocking and element hiding; saved
+  in the profile as `browser.json`;
+- **Find in page** (Ctrl+F): "3 of 58", ↑/↓, highlights cleared on close.
+
+Checked under Xvfb with `crates/stonedgem-chrome/xvfb-check.sh`:
+screenshots of [the page](screenshots/browser-wikipedia.png),
+[find](screenshots/browser-find.png), [the menu](screenshots/browser-menu.png),
+[History](screenshots/browser-history.png),
+[Settings](screenshots/browser-settings.png) and
+[Settings, light](screenshots/browser-settings-light.png).
+
+Still to do in this phase: downloads (Servo's download support needs
+checking first), a context menu, zoom, restoring tabs on start, and the
+oynix-next package.
 
 
 `stonedgem-chrome`: window, tabs, address bar (using `stonedgem-url`),

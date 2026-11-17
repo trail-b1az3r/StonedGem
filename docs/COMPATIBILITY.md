@@ -15,10 +15,10 @@ Legend: **Works** · **Planned** (phase in [MIGRATION.md](MIGRATION.md)) ·
 | Saved passwords, CSV import, Firefox import | **Works** (`stonedgem-vault`); filling forms: Planned (6) |
 | `.poweroynix` signature checking | **Works** (`stonedgem-poweroynix`) |
 | Content blocker and filter lists | **Works** (`stonedgem-blocker`), including on Servo's requests and element hiding (`stonedgem-engine`) |
-| History, bookmarks, reading list, closed tabs | **Works** (`stonedgem-library`); restoring sessions: Planned (5) |
+| History, bookmarks, reading list, closed tabs | **Works** (`stonedgem-library`); History and Bookmarks pages in the window; restoring sessions: Planned (5) |
 | Rendering web pages | Spike works headless (`stonedgem-engine`); real-site compatibility not measured yet (4) |
-| Tabs, address bar, start page | **Works** (`stonedgem-chrome`, first window) |
-| Tree tabs, settings, help, menus | Planned (5) |
+| Tabs, address bar, start page, menu, settings, find in page | **Works** (`stonedgem-chrome`) |
+| Tree tabs, help, downloads, context menu, zoom | Planned (5) |
 | PDF viewing | Unsupported — Servo has no PDF viewer; needs a PDF renderer |
 | Offline games | Planned (5) — they're native, not web |
 | Built-in updater, AUR | Planned (8) |

@@ -75,7 +75,7 @@ fn switching_pages_switches_frames(engine: &Engine) {
     assert!(engine.wait(Duration::from_secs(30), || red.load() == Load::Complete && blue.load() == Load::Complete));
     let colour = |page: &stonedgem_engine::Page| {
         engine.wait(Duration::from_millis(300), || false);
-        page.frame(&engine).unwrap().pixel(100, 75)
+        page.frame(engine).unwrap().pixel(100, 75)
     };
     red.hide();
     blue.show();

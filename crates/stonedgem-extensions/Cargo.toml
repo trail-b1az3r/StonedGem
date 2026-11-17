@@ -17,3 +17,4 @@ oxc = { version = "0.158", features = ["transformer", "codegen", "semantic"] }
 pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
 stonedgem-profile = { path = "../stonedgem-profile" }
 stonedgem-poweroynix = { path = "../stonedgem-poweroynix" }
+stonedgem-theme = { path = "../stonedgem-theme" }

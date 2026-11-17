@@ -17,3 +17,8 @@ iced = { version = "0.14", default-features = false, features = ["tiny-skia", "x
 stonedgem-engine = { path = "../stonedgem-engine" }
 stonedgem-url = { path = "../stonedgem-url" }
 stonedgem-blocker = { path = "../stonedgem-blocker" }
+stonedgem-library = { path = "../stonedgem-library" }
+stonedgem-profile = { path = "../stonedgem-profile" }
+stonedgem-theme = { path = "../stonedgem-theme" }
+serde = { workspace = true }
+serde_json = { workspace = true }

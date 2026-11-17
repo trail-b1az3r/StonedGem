@@ -8506,8 +8506,13 @@ name = "stonedgem-chrome"
 version = "0.1.0"
 dependencies = [
  "iced",
+ "serde",
+ "serde_json",
  "stonedgem-blocker",
  "stonedgem-engine",
+ "stonedgem-library",
+ "stonedgem-profile",
+ "stonedgem-theme",
  "stonedgem-url",
 ]
 
@@ -8536,6 +8541,7 @@ dependencies = [
  "sha2 0.11.1",
  "stonedgem-poweroynix",
  "stonedgem-profile",
+ "stonedgem-theme",
  "zip",
 ]
 
@@ -8563,6 +8569,13 @@ dependencies = [
 [[package]]
 name = "stonedgem-profile"
 version = "0.1.0"
+
+[[package]]
+name = "stonedgem-theme"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "stonedgem-url"

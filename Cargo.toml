@@ -13,6 +13,7 @@ default-members = [
     "crates/stonedgem-blocker",
     "crates/stonedgem-library",
     "crates/stonedgem-extensions",
+    "crates/stonedgem-theme",
 ]
 
 [workspace.package]
@@ -29,3 +30,7 @@ serde_json = "1"
 ring = "0.17"
 sha2 = "0.11"
 sha3 = "0.10"
+
+# Servo makes debug builds huge; keep debug info for our crates only.
+[profile.dev.package."*"]
+debug = false

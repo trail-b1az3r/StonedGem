@@ -17,12 +17,17 @@ services already moved out of OyNIx — and OyNIx uses them:
 | [`stonedgem-blocker`](crates/stonedgem-blocker) | Content blocker: Adblock/uBlock filter lists, element hiding, the list catalogue, `network.ts` rules |
 | [`stonedgem-library`](crates/stonedgem-library) | History, bookmarks (HTML import/export), reading list, recently closed tabs |
 | [`stonedgem-extensions`](crates/stonedgem-extensions) | Extension packages: Chrome/Firefox MV2/MV3, `.oynix`, `.poweroynix`, TypeScript/TSX, widgets |
-| [`stonedgem-chrome`](crates/stonedgem-chrome) | The browser window (Iced): tabs, address bar, page view; `cargo run -p stonedgem-chrome` |
+| [`stonedgem-chrome`](crates/stonedgem-chrome) | The browser window (Iced): tabs, address bar, menu, History, Bookmarks, Settings, find in page; `cargo run -p stonedgem-chrome` |
+| [`stonedgem-theme`](crates/stonedgem-theme) | Material 3 colour schemes from one accent colour (the window's and extension themes') |
 | [`stonedgem-engine`](crates/stonedgem-engine) | Servo behind StonedGem's own types, with the blocker on every request (spike; `cargo test -p stonedgem-engine`) |
 
 The engine works (see [docs/ENGINE-SPIKE.md](docs/ENGINE-SPIKE.md)) and a first browser window runs on it; the extension runtime is planned, not built.
 
-![StonedGem's first window showing Wikipedia](docs/screenshots/browser-wikipedia.png)
+![StonedGem showing Wikipedia, with find in page](docs/screenshots/browser-find.png)
+
+| Settings | History |
+|---|---|
+| ![Settings](docs/screenshots/browser-settings.png) | ![History](docs/screenshots/browser-history.png) |
 Nothing is described as working until its code and tests show it.
 
 ## Documents
