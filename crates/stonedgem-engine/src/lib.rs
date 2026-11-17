@@ -293,6 +293,20 @@ impl Page {
         Some(Frame { width, height, rgba: img.into_raw() })
     }
 
+    /// Make this the page on screen (pages share the drawing surface) and
+    /// give it keyboard focus; call [`Page::hide`] on the others.
+    pub fn show(&self) {
+        self.webview.show();
+        self.webview.set_focused(true);
+        self.state.new_frame.set(true);
+    }
+
+    /// Take this page off screen.
+    pub fn hide(&self) {
+        self.webview.set_focused(false);
+        self.webview.hide();
+    }
+
     pub fn can_go_back(&self) -> bool {
         self.webview.can_go_back()
     }

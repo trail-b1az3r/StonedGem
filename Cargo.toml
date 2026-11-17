@@ -3,7 +3,8 @@ resolver = "2"
 members = ["crates/*"]
 # The Servo engine is large and slow to build (see docs/ENGINE-SPIKE.md);
 # plain `cargo build`/`cargo test` leave it out. Build it with
-# `cargo test -p stonedgem-engine`.
+# `cargo test -p stonedgem-engine`, and the window (stonedgem-chrome, on the
+# engine) with `cargo run -p stonedgem-chrome`.
 default-members = [
     "crates/stonedgem-url",
     "crates/stonedgem-poweroynix",

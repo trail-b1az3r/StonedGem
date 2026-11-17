@@ -17,7 +17,8 @@ Legend: **Works** · **Planned** (phase in [MIGRATION.md](MIGRATION.md)) ·
 | Content blocker and filter lists | **Works** (`stonedgem-blocker`), including on Servo's requests and element hiding (`stonedgem-engine`) |
 | History, bookmarks, reading list, closed tabs | **Works** (`stonedgem-library`); restoring sessions: Planned (5) |
 | Rendering web pages | Spike works headless (`stonedgem-engine`); real-site compatibility not measured yet (4) |
-| Tabs, tree tabs, start page, settings, help | Planned (5) |
+| Tabs, address bar, start page | **Works** (`stonedgem-chrome`, first window) |
+| Tree tabs, settings, help, menus | Planned (5) |
 | PDF viewing | Unsupported — Servo has no PDF viewer; needs a PDF renderer |
 | Offline games | Planned (5) — they're native, not web |
 | Built-in updater, AUR | Planned (8) |

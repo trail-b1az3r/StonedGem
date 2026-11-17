@@ -63,4 +63,26 @@ fn frames_input_and_history() {
     page.back();
     assert!(engine.wait(Duration::from_secs(20), || page.title().as_deref() == Some("clicked") || page.title().as_deref() == Some("One")));
     assert!(page.take_changed());
+
+    page.hide();
+    switching_pages_switches_frames(&engine);
+}
+
+/// Called from `frames_input_and_history`: Servo starts once per process.
+fn switching_pages_switches_frames(engine: &Engine) {
+    let red = engine.open("data:text/html,<style>html{background:rgb(255,0,0)}</style>", &[], &[]).unwrap();
+    let blue = engine.open("data:text/html,<style>html{background:rgb(0,0,255)}</style>", &[], &[]).unwrap();
+    assert!(engine.wait(Duration::from_secs(30), || red.load() == Load::Complete && blue.load() == Load::Complete));
+    let colour = |page: &stonedgem_engine::Page| {
+        engine.wait(Duration::from_millis(300), || false);
+        page.frame(&engine).unwrap().pixel(100, 75)
+    };
+    red.hide();
+    blue.show();
+    let [r, _, b, _] = colour(&blue);
+    assert!(b > 200 && r < 50, "blue page shown, got {r},{b}");
+    blue.hide();
+    red.show();
+    let [r, _, b, _] = colour(&red);
+    assert!(r > 200 && b < 50, "red page shown, got {r},{b}");
 }

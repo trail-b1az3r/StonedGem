@@ -57,7 +57,19 @@ app opens a window, loads pages, routes every request through
 measure site compatibility on a fixed list of sites before going further;
 if it's too poor, WPE WebKit is evaluated against the same list.
 
-## Phase 5 — Iced chrome
+## Phase 5 — Iced chrome (first window ✅)
+
+Done so far: `stonedgem-chrome` builds `stonedgem-browser`, an Iced window
+with tabs, an address bar (`stonedgem-url`: addresses, searches, `!bangs`),
+back/forward/reload, a start page and a blocked-request count, drawing
+Servo's frames by readback. Mouse, wheel and keyboard reach the page;
+Ctrl+T/W/L/R, Ctrl+Tab and Alt+←/→ work. Checked under Xvfb: typing an
+address, a second tab, Wikipedia rendering and scrolling
+([screenshot](screenshots/browser-wikipedia.png)).
+
+Still to do in this phase: menus, settings, history and bookmarks
+(`stonedgem-library`), downloads, find-in-page, the oynix-next package.
+
 
 `stonedgem-chrome`: window, tabs, address bar (using `stonedgem-url`),
 menus, settings and start page, drawing pages from the engine

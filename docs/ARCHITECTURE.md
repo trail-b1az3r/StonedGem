@@ -14,7 +14,7 @@ It separates what **exists and is tested** from what is **planned**.
 |---|---|
 | Engine-independent services (address bar, `.poweroynix` verification, password vault, Firefox import) | **Exists**, moved from OyNIx with their tests. OyNIx uses these crates. |
 | Engine binding (Servo) | Spike working, headless — `stonedgem-engine`; see [ENGINE-SPIKE.md](ENGINE-SPIKE.md). |
-| Iced browser chrome | Planned — phase 5. |
+| Iced browser chrome | First window working — `stonedgem-chrome` (`stonedgem-browser`): tabs, address bar, page view. |
 | Extension runtime | Planned — phase 6. |
 | Slint extension UI | Planned — phase 6. |
 | Z#++ scripting | Planned — phase 7. See [ZSHARP.md](ZSHARP.md). |
