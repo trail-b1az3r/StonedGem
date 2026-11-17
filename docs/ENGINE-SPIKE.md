@@ -1,7 +1,8 @@
 # Engine spike (phase 4): Servo
 
-Status: **the spike works end to end, headless**. Site compatibility on
-real websites is the part still to measure (below).
+Status: **the spike works end to end, headless**, and a first survey of 12
+real sites is below: documents and news work, heavy web apps don't yet. The
+full survey on a home connection is still to do.
 
 ## What was built
 
@@ -45,17 +46,49 @@ cargo test -p stonedgem-engine      # first build ≈5 min with 4 cores
 - The engine is kept out of `default-members`, so ordinary `cargo test`
   and CI stay fast.
 
-## Not yet known: real sites
+## First survey: 12 real sites (2026-11-17)
+
+Run headless from a cloud machine, through its network proxy, with
+`examples/sitecheck.rs`. The baseline is Chromium (headless, Playwright) on
+the same machine and network, with `examples/baseline-chromium.js`.
+"Text" is `document.body.innerText.length` once the page has loaded.
+
+| Site | Servo text / links / images | Chromium text / links / images | Verdict |
+|---|---|---|---|
+| Wikipedia article | 29594 / 1220 / 12 | 20512 / 1224 / 12 | **Same** (Servo counts collapsed sections as text) |
+| BBC News | 8348 / 165 / 21 | 8380 / 165 / 26 | **Same** |
+| Hacker News | 3940 / 225 / 3 | 3935 / 225 / 3 | **Same** |
+| docs.rs | 2775 / 35 / 0 | 2775 / 35 / 0 | **Same** |
+| DuckDuckGo | 7742 / 126 / 46 | 774 / 30 / 4 | **Same or better** |
+| GitHub repository | 5697 / 229 / 9 | 8096 / 395 / 31 | **Partial**: about 70 % of the text, 58 % of the links |
+| Google sign-in | 215 / 4 / 2 | 968 / 6 / 1 | **Worse**: the page loads with less on it |
+| OpenStreetMap | 0 / 0 / 0 | 565 / 42 / 25 | **Broken**: the map app doesn't start |
+| YouTube | error page | 0 / 2 / 2 (app shell) | **Broken** |
+| WSJ | 0 | HTTP 401 | Inconclusive: the site refuses this network |
+| Amazon | 0 | HTTP 202, empty | Inconclusive: bot check |
+| Reddit | 0 | 143 / 1 / 1 | Inconclusive: nearly empty in both |
+
+So: 5 of the 9 sites that answer this network work as in Chromium, 1 works
+partly, and 3 (sign-in, a map app, video) are worse or broken. It's enough to keep
+going with Servo for documents, news and reference sites, but not yet for a
+daily browser.
+
+No requests were blocked on these pages. The page counts stop at the
+`load` event, and the built-in rules are only a short list (no filter
+lists were subscribed), so this doesn't show blocking failing; the local
+test does show it working. The survey on a desktop should subscribe
+EasyList and EasyPrivacy first.
+
+## Still to do: the full survey
 
 The plan's go/no-go is site compatibility on a fixed list of real sites
 (news, shops, sign-ins, video, web apps), compared with OyNIx on
-QtWebEngine. That needs a machine with an ordinary internet connection and
-a display. This sandbox reaches the web only through a proxy that Servo
-isn't set up to use. The next step:
+QtWebEngine. The first survey above ran from a cloud machine, where several sites
+refuse the connection. The full one needs an ordinary home connection:
 
-1. `stonedgem-engine` example `sitecheck`: load each URL from a list, wait
-   for `Complete` (or 30 s), record the title, errors in the console,
-   blocked requests and a screenshot.
+1. `cargo run -p stonedgem-engine --example sitecheck -- sites.txt` with a
+   longer list (examples/sites.txt is a start), and EasyList/EasyPrivacy
+   subscribed. Screenshots are still to add.
 2. Run it on a desktop with the same list in OyNIx, and score each site
    *works / usable / broken*.
 3. If too many are broken, evaluate WPE WebKit against the same list, as
