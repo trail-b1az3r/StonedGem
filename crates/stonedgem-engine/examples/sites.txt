@@ -1,0 +1,13 @@
+# A starting list for the site survey: a mix of kinds. Edit freely.
+https://en.wikipedia.org/wiki/Web_browser
+https://www.bbc.com/news
+https://www.wsj.com/
+https://github.com/servo/servo
+https://news.ycombinator.com/
+https://www.reddit.com/
+https://www.youtube.com/
+https://accounts.google.com/
+https://www.amazon.com/
+https://www.openstreetmap.org/
+https://docs.rs/
+https://duckduckgo.com/
