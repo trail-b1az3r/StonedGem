@@ -6,7 +6,7 @@
 //! families mainstream content blockers use) and downloads them on first
 //! run, then refreshes them periodically. Nothing is bundled in the binary:
 //! the lists are fetched from their maintainers and stored per profile in
-//! `~/.local/share/oynix/<profile>/filter-lists/`.
+//! `~/.local/share/<app>/<profile>/filter-lists/`.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};

@@ -9,7 +9,7 @@
 //!   * a small built-in list of ad / tracker hosts (works offline, first run);
 //!   * the subscribed filter lists (EasyList, EasyPrivacy, uBlock, AdGuard,
 //!     Fanboy… see `filterlists.rs`), downloaded and refreshed automatically;
-//!   * any `*.txt` in `~/.config/oynix/<profile>/filters/`;
+//!   * any `*.txt` in `~/.config/<app>/<profile>/filters/`;
 //!   * `filters.txt` of enabled power extensions with the "filters"
 //!     permission (verified `.poweroynix` packages and built-ins).
 //!
@@ -769,7 +769,7 @@ pub fn init(lists: Vec<(String, Category)>) {
     }
     LOADING.store(true, Ordering::Relaxed);
     std::thread::Builder::new()
-        .name("oynix-filters".into())
+        .name("stonedgem-filters".into())
         .spawn(move || {
             let r = build(&lists);
             *RULES.write().unwrap() = Arc::new(r);
