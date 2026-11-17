@@ -13,6 +13,6 @@ jobs:
         with:
           components: clippy
       - name: Test
-        run: cargo test --workspace
+        run: cargo test
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings

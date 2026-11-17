@@ -1,0 +1,21 @@
+[package]
+name = "stonedgem-engine"
+description = "StonedGem's web engine: Servo behind StonedGem's own types, with every request checked by stonedgem-blocker and user scripts/styles for extensions."
+version.workspace = true
+edition.workspace = true
+# Servo's own minimum.
+rust-version = "1.88"
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# No default features: no devtools, no multiprocess, no WebGPU/WebXR for
+# the spike. `bundled` bakes in Servo's resources and FreeType.
+servo = { version = "0.8.0", default-features = false, features = ["bundled", "js_jit"] }
+url = "2.5"
+http = "1.4"
+dpi = "0.1"
+# Same major as servo-embedder-traits, for its `Destination`.
+content-security-policy = "0.9"
+stonedgem-blocker = { path = "../stonedgem-blocker" }
+stonedgem-url = { path = "../stonedgem-url" }

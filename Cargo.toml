@@ -1,6 +1,18 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+# The Servo engine is large and slow to build (see docs/ENGINE-SPIKE.md);
+# plain `cargo build`/`cargo test` leave it out. Build it with
+# `cargo test -p stonedgem-engine`.
+default-members = [
+    "crates/stonedgem-url",
+    "crates/stonedgem-poweroynix",
+    "crates/stonedgem-vault",
+    "crates/stonedgem-profile",
+    "crates/stonedgem-blocker",
+    "crates/stonedgem-library",
+    "crates/stonedgem-extensions",
+]
 
 [workspace.package]
 version = "0.1.0"
