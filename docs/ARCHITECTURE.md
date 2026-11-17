@@ -42,7 +42,7 @@ described as working until its crate and tests say so.
            │                          │
    ┌───────▼────────┐        ┌────────▼─────────────────────────────────────────┐
    │ stonedgem-     │        │ services: url ✓ · poweroynix ✓ · vault ✓ ·       │
-   │ engine (Servo) │◄──────►│ blocker ✓ · profile ✓ · library (history, bkmk) │
+   │ engine (Servo) │◄──────►│ blocker ✓ · profile ✓ · library ✓ · extensions ✓ │
    └───────┬────────┘        └──────────────────────────────────────────────────┘
            │
    ┌───────▼─────────────────────────────────────────┐

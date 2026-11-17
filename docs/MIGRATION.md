@@ -29,12 +29,19 @@ What stays with the product: which extension filter files are enabled
 (passed in with `set_extension_filters`) and the HTTP client behind
 `network.ts`'s cross-origin fetch.
 
-## Phase 3 — library and extension packages
+## Phase 3 — library and extension packages ✅
 
-- `stonedgem-library`: history, bookmarks, reading list, sessions.
-- `stonedgem-extensions`: the extension registry, `.oynix`/`.poweroynix`
-  packaging, TypeScript compilation (oxc), widget runtime.
-  QML panel checking stays in OyNIx until panels move to Slint.
+| Crate | From OyNIx | What it is |
+|---|---|---|
+| `stonedgem-library` | `src/core/library.rs` | history, bookmarks (Netscape HTML import/export), reading list, recently closed tabs |
+| `stonedgem-extensions` | `src/core/extensions.rs`, `tscompile.rs`, `material.rs` | the extension registry and converters (Chrome/Firefox MV2/MV3, `.crx`, `.xpi`, `.oynix`, `.poweroynix`), TypeScript/TSX compilation (oxc), widgets, network.ts pages, Material schemes |
+
+The product supplies a `Host` at start-up: its name (shown as who verified
+built-ins), its trusted `.poweroynix` keys, a QML checker and the engine's
+page-channel script. A browser without a QML runtime leaves the checker
+out and packages with QML panels are refused with a clear message.
+QML checking itself (`qmlcheck.rs`) stays in OyNIx until panels move to
+Slint in phase 6.
 
 ## Phase 4 — engine spike
 

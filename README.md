@@ -15,6 +15,8 @@ services already moved out of OyNIx — and OyNIx uses them:
 | [`stonedgem-vault`](crates/stonedgem-vault) | Encrypted password store, CSV import, Firefox passwords and bookmarks |
 | [`stonedgem-profile`](crates/stonedgem-profile) | Profile folders (config, data, cache, filters) under the product's app name |
 | [`stonedgem-blocker`](crates/stonedgem-blocker) | Content blocker: Adblock/uBlock filter lists, element hiding, the list catalogue, `network.ts` rules |
+| [`stonedgem-library`](crates/stonedgem-library) | History, bookmarks (HTML import/export), reading list, recently closed tabs |
+| [`stonedgem-extensions`](crates/stonedgem-extensions) | Extension packages: Chrome/Firefox MV2/MV3, `.oynix`, `.poweroynix`, TypeScript/TSX, widgets |
 
 The engine, the chrome and the extension runtime are planned, not built.
 Nothing is described as working until its code and tests show it.
