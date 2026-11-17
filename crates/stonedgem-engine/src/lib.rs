@@ -16,14 +16,51 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use servo::{
-    EventLoopWaker, JSValue, LoadStatus, Preferences, RenderingContext, Servo, ServoBuilder, SoftwareRenderingContext,
-    UserContentManager, UserScript, WebResourceLoad, WebResourceResponse, WebView, WebViewBuilder,
-    WebViewDelegate,
+    DeviceIntRect, DeviceIntSize, DevicePoint, EventLoopWaker, InputEvent, JSValue, KeyState, KeyboardEvent, LoadStatus,
+    MouseButton, MouseButtonAction, MouseButtonEvent, MouseMoveEvent, NamedKey, Preferences, RenderingContext, Servo,
+    ServoBuilder, SoftwareRenderingContext, UserContentManager, UserScript, WebResourceLoad, WebResourceResponse, WebView,
+    WebViewBuilder, WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
 };
 
 use servo::user_contents::UserStyleSheet;
 
 pub use servo::JSValue as Value;
+
+/// A rendered frame: `width`×`height` pixels, RGBA, row by row.
+#[derive(Clone)]
+pub struct Frame {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
+impl Frame {
+    /// The pixel at (x, y) as [r, g, b, a].
+    pub fn pixel(&self, x: u32, y: u32) -> [u8; 4] {
+        let i = ((y * self.width + x) * 4) as usize;
+        self.rgba[i..i + 4].try_into().unwrap()
+    }
+}
+
+/// A key press sent to the page.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Key {
+    /// Typed text (one character, usually).
+    Text(String),
+    Enter,
+    Backspace,
+    Delete,
+    Tab,
+    Escape,
+    Left,
+    Right,
+    Up,
+    Down,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+}
 
 /// Whether a page has finished loading.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,6 +101,8 @@ impl EventLoopWaker for Waker {
 #[derive(Default)]
 struct PageState {
     load: Cell<Option<LoadStatus>>,
+    new_frame: Cell<bool>,
+    changed: Cell<bool>,
     blocked: RefCell<Vec<String>>,
     console: RefCell<Vec<String>>,
 }
@@ -92,6 +131,23 @@ impl WebViewDelegate for Delegate {
 
     fn notify_load_status_changed(&self, _webview: WebView, status: LoadStatus) {
         self.0.load.set(Some(status));
+        self.0.changed.set(true);
+    }
+
+    fn notify_new_frame_ready(&self, _webview: WebView) {
+        self.0.new_frame.set(true);
+    }
+
+    fn notify_page_title_changed(&self, _webview: WebView, _title: Option<String>) {
+        self.0.changed.set(true);
+    }
+
+    fn notify_url_changed(&self, _webview: WebView, _url: url::Url) {
+        self.0.changed.set(true);
+    }
+
+    fn notify_history_changed(&self, _webview: WebView, _entries: Vec<url::Url>, _current: usize) {
+        self.0.changed.set(true);
     }
 
     fn show_console_message(&self, _webview: WebView, _level: servo::ConsoleLogLevel, message: String) {
@@ -116,6 +172,20 @@ impl Engine {
         context.make_current().map_err(|e| format!("software rendering: {e:?}"))?;
         let servo = ServoBuilder::default().preferences(Preferences::default()).event_loop_waker(Box::new(Waker)).build();
         Ok(Engine { servo, context })
+    }
+
+    /// The size pages render at.
+    pub fn size(&self) -> (u32, u32) {
+        let s = self.context.size();
+        (s.width, s.height)
+    }
+
+    /// Change the size pages render at (and `page`'s viewport).
+    pub fn resize(&self, page: &Page, width: u32, height: u32) {
+        let size = dpi::PhysicalSize { width: width.max(1), height: height.max(1) };
+        self.context.resize(size);
+        page.webview.resize(size);
+        page.state.new_frame.set(true);
     }
 
     /// Run Servo's event loop once.
@@ -199,6 +269,96 @@ impl Page {
         self.state.load.set(None);
         self.webview.load(url::Url::parse(url).map_err(|e| format!("{url}: {e}"))?);
         Ok(())
+    }
+
+    /// True once since the last call if the title, address, history or load
+    /// state changed: time to refresh the chrome.
+    pub fn take_changed(&self) -> bool {
+        self.state.changed.replace(false)
+    }
+
+    /// Whether Servo has drawn something new since the last [`Page::frame`].
+    pub fn has_new_frame(&self) -> bool {
+        self.state.new_frame.get()
+    }
+
+    /// Paint the page and read it back. Pages share the engine's drawing
+    /// surface, so this draws whichever page asks.
+    pub fn frame(&self, engine: &Engine) -> Option<Frame> {
+        self.state.new_frame.set(false);
+        self.webview.paint();
+        let (w, h) = engine.size();
+        let img = engine.context.read_to_image(DeviceIntRect::from_size(DeviceIntSize::new(w as i32, h as i32)))?;
+        let (width, height) = img.dimensions();
+        Some(Frame { width, height, rgba: img.into_raw() })
+    }
+
+    pub fn can_go_back(&self) -> bool {
+        self.webview.can_go_back()
+    }
+
+    pub fn can_go_forward(&self) -> bool {
+        self.webview.can_go_forward()
+    }
+
+    pub fn back(&self) {
+        if self.webview.can_go_back() {
+            self.webview.go_back(1);
+        }
+    }
+
+    pub fn forward(&self) {
+        if self.webview.can_go_forward() {
+            self.webview.go_forward(1);
+        }
+    }
+
+    pub fn reload(&self) {
+        self.webview.reload();
+    }
+
+    /// The pointer moved to (x, y), in page pixels.
+    pub fn mouse_move(&self, x: f32, y: f32) {
+        self.webview.notify_input_event(InputEvent::MouseMove(MouseMoveEvent::new(DevicePoint::new(x, y).into())));
+    }
+
+    /// A left click at (x, y).
+    pub fn click(&self, x: f32, y: f32) {
+        let p = DevicePoint::new(x, y);
+        self.mouse_move(x, y);
+        for action in [MouseButtonAction::Down, MouseButtonAction::Up] {
+            self.webview.notify_input_event(InputEvent::MouseButton(MouseButtonEvent::new(action, MouseButton::Primary, p.into())));
+        }
+    }
+
+    /// Scroll by (dx, dy) pixels with the pointer at (x, y). Positive `dy`
+    /// moves the content up, i.e. scrolls down the page.
+    pub fn scroll(&self, x: f32, y: f32, dx: f64, dy: f64) {
+        let delta = WheelDelta { x: -dx, y: -dy, z: 0.0, mode: WheelMode::DeltaPixel };
+        self.webview.notify_input_event(InputEvent::Wheel(WheelEvent::new(delta, DevicePoint::new(x, y).into())));
+    }
+
+    /// Press and release a key.
+    pub fn key(&self, key: &Key) {
+        let k = match key {
+            Key::Text(t) => servo::Key::Character(t.clone()),
+            Key::Enter => servo::Key::Named(NamedKey::Enter),
+            Key::Backspace => servo::Key::Named(NamedKey::Backspace),
+            Key::Delete => servo::Key::Named(NamedKey::Delete),
+            Key::Tab => servo::Key::Named(NamedKey::Tab),
+            Key::Escape => servo::Key::Named(NamedKey::Escape),
+            Key::Left => servo::Key::Named(NamedKey::ArrowLeft),
+            Key::Right => servo::Key::Named(NamedKey::ArrowRight),
+            Key::Up => servo::Key::Named(NamedKey::ArrowUp),
+            Key::Down => servo::Key::Named(NamedKey::ArrowDown),
+            Key::Home => servo::Key::Named(NamedKey::Home),
+            Key::End => servo::Key::Named(NamedKey::End),
+            Key::PageUp => servo::Key::Named(NamedKey::PageUp),
+            Key::PageDown => servo::Key::Named(NamedKey::PageDown),
+        };
+        for state in [KeyState::Down, KeyState::Up] {
+            self.webview.notify_input_event(InputEvent::Keyboard(KeyboardEvent::from_state_and_key(state, k.clone())));
+        }
     }
 
     /// Run `script` in the page and wait (spinning `engine`) for its value.
