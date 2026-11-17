@@ -1,0 +1,15 @@
+[package]
+name = "stonedgem-blocker"
+description = "Content blocker for StonedGem browsers: Adblock/uBlock filter lists (network rules and element hiding), the list catalogue, and runtime rules from power extensions' network.ts."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+aho-corasick = "1"
+serde.workspace = true
+serde_json.workspace = true
+stonedgem-url = { path = "../stonedgem-url" }
+stonedgem-profile = { path = "../stonedgem-profile" }

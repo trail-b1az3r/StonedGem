@@ -1,0 +1,10 @@
+[package]
+name = "stonedgem-profile"
+description = "Profile folders (XDG), atomic writes and timestamps for StonedGem browsers. The product sets its name and profile once at startup."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
