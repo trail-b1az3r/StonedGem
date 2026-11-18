@@ -120,6 +120,8 @@ pub struct Browser {
     ext_scripts: Vec<String>,
     pub ext_path: String,
     pub ext_message: String,
+    /// Held modifier keys (text fields swallow some Ctrl shortcuts as text).
+    modifiers: keyboard::Modifiers,
 }
 
 #[derive(Debug, Clone)]
@@ -154,6 +156,7 @@ pub enum Message {
     OpenDownloadsFolder,
     Zoom(i32),
     SetRestore(bool),
+    Modifiers(keyboard::Modifiers),
     ExtPath(String),
     ExtInstall,
     ExtToggle(String),
@@ -209,6 +212,7 @@ impl Browser {
             ext_scripts: vec![],
             ext_path: String::new(),
             ext_message: String::new(),
+            modifiers: keyboard::Modifiers::empty(),
         };
         b.reload_extensions();
         match Session::load().filter(|_| b.settings.restore_tabs) {
@@ -449,9 +453,15 @@ impl Browser {
                 }
             }
             Message::Address(s) => {
+                // Iced's text field takes Ctrl+, as typing a comma: treat it
+                // as the Settings shortcut instead.
+                if self.modifiers.command() && s.chars().count() == self.address.chars().count() + 1 && s.matches(',').count() > self.address.matches(',').count() {
+                    return self.update(Message::Open(Internal::Settings));
+                }
                 self.address = s;
                 self.editing = true;
             }
+            Message::Modifiers(m) => self.modifiers = m,
             Message::Go => {
                 if let Some(page) = Internal::from_address(&self.address) {
                     self.open_internal(page);
@@ -746,6 +756,7 @@ impl Browser {
             window::resize_events().map(|(_, size)| Message::Resized(size)),
             keyboard::listen().filter_map(|e| match e {
                 keyboard::Event::KeyPressed { key, text, modifiers, .. } => Some(Message::Key(key, text.map(|t| t.to_string()), modifiers)),
+                keyboard::Event::ModifiersChanged(m) => Some(Message::Modifiers(m)),
                 _ => None,
             }),
         ])
