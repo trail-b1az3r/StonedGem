@@ -7,6 +7,7 @@ use stonedgem_engine::Key;
 
 pub mod downloads;
 pub mod find;
+pub mod glass;
 pub mod palette;
 pub mod session;
 pub mod settings;

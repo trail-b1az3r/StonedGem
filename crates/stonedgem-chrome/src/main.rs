@@ -130,6 +130,13 @@ pub struct Browser {
     pub zs_editor: iced::widget::text_editor::Content,
     pub zs_output: String,
     pub zs_frame: Option<image::Handle>,
+    /// The latest page frame's pixels (what glass popups refract).
+    last_frame: Option<(u32, u32, Vec<u8>)>,
+    /// The refracting glass behind the open popup, and when to redraw it.
+    pub glass_bg: Option<image::Handle>,
+    glass_pointer: Option<Point>,
+    glass_dirty: bool,
+    window_h: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -166,6 +173,7 @@ pub enum Message {
     SetRestore(bool),
     Modifiers(keyboard::Modifiers),
     ZsEdit(iced::widget::text_editor::Action),
+    GlassPointer(Point),
     ZsRun,
     DismissToast,
     ExtPath(String),
@@ -229,6 +237,11 @@ impl Browser {
             zs_editor: iced::widget::text_editor::Content::with_text(stonedgem_chrome::zs_hooks::PLAYGROUND_SAMPLE),
             zs_output: String::new(),
             zs_frame: None,
+            last_frame: None,
+            glass_bg: None,
+            glass_pointer: None,
+            glass_dirty: false,
+            window_h: 800.0,
         };
         b.reload_extensions();
         match Session::load().filter(|_| b.settings.restore_tabs) {
@@ -377,6 +390,38 @@ impl Browser {
 
     fn notify(&mut self, text: impl Into<String>) {
         self.toast = Some((text.into(), self.ticks + 240));
+        self.glass_dirty = true;
+    }
+
+    pub fn window_height(&self) -> u32 {
+        self.window_h as u32
+    }
+
+    /// Render the refracting glass behind the open popup from the latest
+    /// page frame (Liquid Glass; see stonedgem_chrome::glass).
+    fn refresh_glass(&mut self) {
+        self.glass_dirty = false;
+        let (Some((x, y, w, h)), Some((fw, fh, px))) = (ui::popup_rect(self), self.last_frame.as_ref()) else {
+            self.glass_bg = None;
+            return;
+        };
+        if self.tab().and_then(|t| t.page()).is_none() {
+            self.glass_bg = None;
+            return;
+        }
+        let p = self.palette;
+        let chrome = CHROME_HEIGHT + if self.find.is_some() { FIND_HEIGHT } else { 0.0 };
+        let bd = stonedgem_chrome::glass::Backdrop { rgba: px, w: *fw, h: *fh, outside: [p.surface_container.r, p.surface_container.g, p.surface_container.b] };
+        let tint = p.surface_container;
+        let g = stonedgem_chrome::glass::Glass {
+            radius: if self.toast.is_some() && !self.menu && self.context.is_none() { h / 2.0 } else { 20.0 },
+            bend: 14.0,
+            frost: 4.0,
+            tint: [tint.r, tint.g, tint.b, if p.dark { 0.84 } else { 0.80 }],
+            rim: if p.dark { [1.0, 1.0, 1.0, 0.35] } else { [1.0, 1.0, 1.0, 0.9] },
+        };
+        let rgba = stonedgem_chrome::glass::refract(&bd, x, y - chrome, w as u32, h as u32, &g, self.glass_pointer.map(|q| (q.x, q.y)));
+        self.glass_bg = Some(image::Handle::from_rgba(w as u32, h as u32, rgba));
     }
 
     /// Run the Z#++ playground's program and show its output and canvas.
@@ -494,6 +539,11 @@ impl Browser {
                 }
                 if self.toast.as_ref().is_some_and(|(_, until)| self.ticks >= *until) {
                     self.toast = None;
+                    self.glass_dirty = true;
+                }
+                // Glass popups follow the page and the pointer, a few times a second.
+                if self.glass_dirty && self.ticks.is_multiple_of(4) && (self.menu || self.context.is_some() || self.toast.is_some() || self.glass_bg.is_some()) {
+                    self.refresh_glass();
                 }
                 if self.ticks.is_multiple_of(120) {
                     self.save_session();
@@ -501,7 +551,9 @@ impl Browser {
                 if let Some(p) = self.page() {
                     if p.has_new_frame() {
                         if let Some(f) = p.frame(&self.engine) {
+                            self.last_frame = Some((f.width, f.height, f.rgba.clone()));
                             self.frame = Some(image::Handle::from_rgba(f.width, f.height, f.rgba));
+                            self.glass_dirty = true;
                         }
                     }
                 }
@@ -517,6 +569,7 @@ impl Browser {
                 }
             }
             Message::Resized(size) => {
+                self.window_h = size.height;
                 self.view = (size.width.max(1.0) as u32, (size.height - CHROME_HEIGHT).max(1.0) as u32);
                 if let Some(p) = self.page() {
                     self.engine.resize(p, self.view.0, self.page_height());
@@ -619,8 +672,19 @@ impl Browser {
                     }
                 }
             }
-            Message::ToggleMenu => self.menu = !self.menu,
-            Message::CloseMenu => self.menu = false,
+            Message::ToggleMenu => {
+                self.menu = !self.menu;
+                self.glass_pointer = None;
+                self.refresh_glass();
+            }
+            Message::GlassPointer(q) => {
+                self.glass_pointer = Some(q);
+                self.glass_dirty = true;
+            }
+            Message::CloseMenu => {
+                self.menu = false;
+                self.refresh_glass();
+            }
             Message::Open(page) => {
                 self.menu = false;
                 self.open_internal(page);
@@ -733,8 +797,13 @@ impl Browser {
                     image: parts.next().unwrap_or_default(),
                     selection: parts.next().unwrap_or_default(),
                 });
+                self.glass_pointer = None;
+                self.refresh_glass();
             }
-            Message::CloseContext => self.context = None,
+            Message::CloseContext => {
+                self.context = None;
+                self.refresh_glass();
+            }
             Message::OpenInNewTab(url) => {
                 self.context = None;
                 let back = self.active;

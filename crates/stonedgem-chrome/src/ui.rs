@@ -276,8 +276,7 @@ pub fn view(b: &Browser) -> Element<'_, Message> {
         .into();
     }
     if let Some(c) = &b.context {
-        let top = chrome + c.at.y;
-        let left = c.at.x.min(b.view_width() as f32 - 270.0).max(8.0);
+        let (left, top, _, _) = popup_rect(b).unwrap_or((8.0, chrome, 0.0, 0.0));
         return stack![
             base,
             mouse_area(container(space()).width(Length::Fill).height(Length::Fill))
@@ -288,24 +287,34 @@ pub fn view(b: &Browser) -> Element<'_, Message> {
         .into();
     }
     match &b.toast {
-        Some((t, _)) => stack![base, toast(p, t)].into(),
+        Some((t, _)) => stack![base, toast(b, t)].into(),
         None => base.into(),
     }
 }
 
-/// A glass capsule at the bottom centre with a short message.
-fn toast<'a>(p: Palette, t: &str) -> Element<'a, Message> {
-    let pill = button(text(t.to_string()).size(14).color(p.on_surface))
-        .on_press(Message::DismissToast)
-        .padding(Padding::from([10, 18]))
-        .style(move |_: &Theme, _s| button::Style {
-            background: Some(Background::Color(alpha(p.surface_container, 0.96))),
-            text_color: p.on_surface,
-            border: Border { radius: radius(22.0), width: 1.0, color: glass_rim(p) },
-            shadow: shadow(8.0, 24.0, if p.dark { 0.45 } else { 0.18 }),
-            ..Default::default()
-        });
-    container(pill).width(Length::Fill).height(Length::Fill).align_x(Alignment::Center).align_y(Alignment::End).padding(24).into()
+/// A glass capsule at the bottom centre with a short message (refracting
+/// the page behind it).
+fn toast<'a>(b: &'a Browser, t: &str) -> Element<'a, Message> {
+    let p = b.palette;
+    let w = toast_width(t);
+    let label = container(text(t.to_string()).size(14).color(p.on_surface).wrapping(iced::widget::text::Wrapping::None)).width(w).height(TOAST_H).center(Length::Fixed(w));
+    let face: Element<'a, Message> = match &b.glass_bg {
+        Some(h) => stack![image(h.clone()).width(w).height(TOAST_H).content_fit(iced::ContentFit::Fill), label].into(),
+        None => container(label)
+            .style(move |_: &Theme| container::Style {
+                background: Some(Background::Color(alpha(p.surface_container, 0.96))),
+                border: Border { radius: radius(TOAST_H / 2.0), width: 1.0, color: glass_rim(p) },
+                ..Default::default()
+            })
+            .into(),
+    };
+    let pill = button(face).on_press(Message::DismissToast).padding(0).style(move |_: &Theme, _s| button::Style {
+        background: None,
+        border: Border { radius: radius(TOAST_H / 2.0), width: 1.0, color: glass_rim(p) },
+        shadow: shadow(8.0, 24.0, if p.dark { 0.45 } else { 0.18 }),
+        ..Default::default()
+    });
+    container(mouse_area(pill).on_move(Message::GlassPointer)).width(Length::Fill).height(Length::Fill).align_x(Alignment::Center).align_y(Alignment::End).padding(24).into()
 }
 
 /// The Z#++ playground: an editor, Run, the output and the canvas.
@@ -483,8 +492,81 @@ fn find_bar(b: &Browser) -> Element<'_, Message> {
 
 // ── Menus ────────────────────────────────────────────────────────────
 
-fn popup<'a>(p: Palette, content: impl Into<Element<'a, Message>>, width: f32) -> Element<'a, Message> {
-    container(content).padding(8).width(width).style(move |_: &Theme| popup_style(p)).into()
+// ── Liquid Glass popups ──────────────────────────────────────────────
+
+pub const MENU_W: f32 = 288.0;
+pub const CTX_W: f32 = 262.0;
+
+/// Popup height for `rows` 40 px items and `dividers` (9 px), with 2 px
+/// spacing and 8 px padding: fixed, so the glass behind lines up exactly.
+pub fn popup_height(rows: usize, dividers: usize) -> f32 {
+    16.0 + rows as f32 * 40.0 + dividers as f32 * 9.0 + (rows + dividers).saturating_sub(1) as f32 * 2.0
+}
+
+fn context_rows(c: &crate::ContextMenu) -> (usize, usize) {
+    let (mut r, mut d) = (5, 1);
+    if !c.link.is_empty() {
+        r += 3;
+        d += 1;
+    }
+    if !c.image.is_empty() {
+        r += 3;
+        d += 1;
+    }
+    if !c.selection.trim().is_empty() {
+        r += 1;
+        d += 1;
+    }
+    (r, d)
+}
+
+/// Where the open popup sits in the window (x, y, w, h), if one is open.
+pub fn popup_rect(b: &Browser) -> Option<(f32, f32, f32, f32)> {
+    let chrome = CHROME_HEIGHT + if b.find.is_some() { FIND_HEIGHT } else { 0.0 };
+    if b.menu {
+        return Some((b.view_width() as f32 - 16.0 - MENU_W, chrome - 10.0, MENU_W, popup_height(9, 2)));
+    }
+    if let Some(c) = &b.context {
+        let (r, d) = context_rows(c);
+        let h = popup_height(r, d);
+        let left = c.at.x.min(b.view_width() as f32 - CTX_W - 8.0).max(8.0);
+        // Keep it inside the window: open upwards if there isn't room below.
+        let top = (chrome + c.at.y).min(b.window_height() as f32 - h - 8.0).max(chrome);
+        return Some((left, top, CTX_W, h));
+    }
+    if let Some((t, _)) = &b.toast {
+        let w = toast_width(t);
+        return Some(((b.view_width() as f32 - w) / 2.0, b.window_height() as f32 - 24.0 - TOAST_H, w, TOAST_H));
+    }
+    None
+}
+
+const TOAST_H: f32 = 42.0;
+fn toast_width(t: &str) -> f32 {
+    (t.chars().count() as f32 * 7.6 + 40.0).clamp(120.0, 640.0)
+}
+
+/// The popup frame: refracting glass (when the page is behind it) with a
+/// light rim, or the plain popup sheet.
+fn popup<'a>(b: &'a Browser, content: impl Into<Element<'a, Message>>, width: f32, height: f32) -> Element<'a, Message> {
+    let p = b.palette;
+    let rim = move |_: &Theme| container::Style {
+        border: Border { radius: radius(20.0), width: 1.0, color: glass_rim(p) },
+        shadow: shadow(16.0, 40.0, if p.dark { 0.45 } else { 0.18 }),
+        ..Default::default()
+    };
+    let body: Element<'a, Message> = match &b.glass_bg {
+        Some(h) => stack![
+            image(h.clone()).width(width).height(height).content_fit(iced::ContentFit::Fill),
+            container(content).padding(8).width(width).height(height).style(move |_: &Theme| container::Style {
+                border: Border { radius: radius(20.0), width: 1.0, color: glass_rim(p) },
+                ..Default::default()
+            })
+        ]
+        .into(),
+        None => container(content).padding(8).width(width).height(height).style(move |_: &Theme| popup_style(p)).into(),
+    };
+    mouse_area(container(body).style(rim)).on_move(Message::GlassPointer).into()
 }
 
 fn menu_item<'a>(p: Palette, label: &'a str, keys: &'a str, msg: Option<Message>) -> Element<'a, Message> {
@@ -524,6 +606,7 @@ fn menu(b: &Browser) -> Element<'_, Message> {
         icon(p, "+", page.map(|_| Message::Zoom(1))),
     ]
     .align_y(Alignment::Center)
+    .height(40)
     .padding(Padding { top: 0.0, right: 0.0, bottom: 0.0, left: 14.0 });
     let list = column![
         menu_item(p, "New tab", "Ctrl+T", Some(Message::NewTab)),
@@ -539,7 +622,7 @@ fn menu(b: &Browser) -> Element<'_, Message> {
         menu_item(p, "Quit", "", Some(Message::Quit)),
     ]
     .spacing(2);
-    popup(p, list, 288.0)
+    popup(b, list, MENU_W, popup_height(9, 2))
 }
 
 fn context_menu<'a>(b: &'a Browser, c: &'a crate::ContextMenu) -> Element<'a, Message> {
@@ -570,7 +653,8 @@ fn context_menu<'a>(b: &'a Browser, c: &'a crate::ContextMenu) -> Element<'a, Me
         .push(menu_divider(p))
         .push(menu_item(p, "Bookmark this page", "Ctrl+D", Some(Message::ToggleBookmark)))
         .push(menu_item(p, "Find in page", "Ctrl+F", Some(Message::FindOpen)));
-    popup(p, list, 262.0)
+    let (r, d) = context_rows(c);
+    popup(b, list, CTX_W, popup_height(r, d))
 }
 
 // ── Content ──────────────────────────────────────────────────────────

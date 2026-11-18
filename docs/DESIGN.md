@@ -25,6 +25,20 @@ with Liquid Glass materials on the controls. No gradient backdrops.
   20 (popups), 24 (cards), full (capsules). **Type:** 34 bold (page title),
   20 semibold (section), 15 (body), 13 (secondary), 12 (labels).
 
+### Dynamic refraction
+
+Glass that floats over the page — menus, popovers, the right-click menu,
+notifications — is real Liquid Glass: it shows the live page behind it,
+frosted and tinted, bent inward near its rounded rim like a lens (with a
+little colour dispersion), with a specular rim lit from the pointer's
+position, so the highlight moves as the pointer does. Both apps use the
+same model: OyNIx as a Qt Quick shader (`assets/shaders/liquidglass.frag`
+there, over a live capture of the window), the Iced window on the CPU from
+Servo's page frames (`stonedgem_chrome::glass`). The tint stays strong
+enough for text on the glass to keep 4.5:1 contrast over busy pages.
+Bars (toolbar, tabs) keep the glass material without refraction: nothing
+is drawn behind them.
+
 In the Iced window, shadows are kept to popups: Iced's CPU renderer
 repaints drop shadows over neighbouring content when it redraws part of
 the window, so glass there is defined by fill, rim and specular line.
