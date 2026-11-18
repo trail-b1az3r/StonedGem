@@ -8511,6 +8511,7 @@ dependencies = [
  "serde_json",
  "stonedgem-blocker",
  "stonedgem-engine",
+ "stonedgem-extensions",
  "stonedgem-library",
  "stonedgem-profile",
  "stonedgem-theme",

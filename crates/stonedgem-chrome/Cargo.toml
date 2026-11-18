@@ -20,6 +20,7 @@ stonedgem-blocker = { path = "../stonedgem-blocker" }
 stonedgem-library = { path = "../stonedgem-library" }
 stonedgem-profile = { path = "../stonedgem-profile" }
 stonedgem-theme = { path = "../stonedgem-theme" }
+stonedgem-extensions = { path = "../stonedgem-extensions" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 # Downloads: the same client and certificate handling as OyNIx's updater.

@@ -721,11 +721,44 @@ fn settings(b: &Browser) -> Element<'_, Message> {
     ]
     .spacing(6);
 
+    let mut ext = column![].spacing(6);
+    if b.extensions.is_empty() {
+        ext = ext.push(text("No extensions yet. Add an unpacked .oynix folder below.").size(14).color(p.on_surface_variant));
+    }
+    for e in &b.extensions {
+        let note = if e.kind == "oynix" { format!("{} · {}", e.version, if e.matches.is_empty() { "no pages".to_string() } else { e.matches.join(", ") }) } else { format!("{} · needs WebExtensions (not in this preview)", e.version) };
+        ext = ext.push(
+            row![
+                column![text(e.name.clone()).size(15).color(p.on_surface), text(note).size(12).color(p.on_surface_variant).wrapping(iced::widget::text::Wrapping::None)].spacing(2).width(Length::Fill),
+                toggler(e.enabled).on_toggle({
+                    let id = e.id.clone();
+                    move |_| Message::ExtToggle(id.clone())
+                }).size(24),
+                icon(p, "✕", Some(Message::ExtRemove(e.id.clone()))),
+            ]
+            .spacing(10)
+            .align_y(Alignment::Center)
+            .height(52),
+        );
+    }
+    ext = ext.push(
+        row![
+            text_input("Folder of an unpacked extension", &b.ext_path).on_input(Message::ExtPath).on_submit(Message::ExtInstall).padding(Padding::from([9, 16])).size(14).style(field(p, true)),
+            button(text("Add").size(14)).on_press(Message::ExtInstall).padding(Padding::from([9, 20])).style(filled(p)),
+        ]
+        .spacing(8)
+        .align_y(Alignment::Center),
+    );
+    if !b.ext_message.is_empty() {
+        ext = ext.push(text(b.ext_message.clone()).size(13).color(p.on_surface_variant));
+    }
+
     column![
         heading(p, "Settings", format!("{} preview", product())),
         section(p, "Appearance", appearance),
         section(p, "Search and start", search),
         section(p, "Privacy", privacy),
+        section(p, "Extensions", ext),
         section(
             p,
             "About",

@@ -115,6 +115,11 @@ pub struct Browser {
     pub downloads: Downloads,
     pub context: Option<ContextMenu>,
     saved_session: Session,
+    /// Installed extensions and the guarded scripts of the enabled ones.
+    pub extensions: Vec<stonedgem_extensions::registry::Entry>,
+    ext_scripts: Vec<String>,
+    pub ext_path: String,
+    pub ext_message: String,
 }
 
 #[derive(Debug, Clone)]
@@ -149,6 +154,10 @@ pub enum Message {
     OpenDownloadsFolder,
     Zoom(i32),
     SetRestore(bool),
+    ExtPath(String),
+    ExtInstall,
+    ExtToggle(String),
+    ExtRemove(String),
     FindOpen,
     FindQuery(String),
     FindStep(i32),
@@ -196,7 +205,12 @@ impl Browser {
             downloads: Downloads::default(),
             context: None,
             saved_session: Session::default(),
+            extensions: vec![],
+            ext_scripts: vec![],
+            ext_path: String::new(),
+            ext_message: String::new(),
         };
+        b.reload_extensions();
         match Session::load().filter(|_| b.settings.restore_tabs) {
             Some(s) => {
                 for url in &s.tabs {
@@ -226,7 +240,7 @@ impl Browser {
     }
 
     fn open_web(&mut self, url: &str) {
-        match self.engine.open(url, &[], &[]) {
+        match self.engine.open(url, &self.ext_scripts, &[]) {
             Ok(page) => {
                 self.tabs.push(Tab { content: Content::Web(page), info: TabInfo { url: url.into(), loading: true, ..Default::default() }, recorded: String::new() });
                 self.select(self.tabs.len() - 1);
@@ -298,7 +312,7 @@ impl Browser {
                     eprintln!("stonedgem: {e}");
                 }
             }
-            Content::Internal(_) => match self.engine.open(url, &[], &[]) {
+            Content::Internal(_) => match self.engine.open(url, &self.ext_scripts, &[]) {
                 Ok(p) => {
                     t.content = Content::Web(p);
                     t.info = TabInfo { url: url.into(), loading: true, ..Default::default() };
@@ -327,6 +341,14 @@ impl Browser {
         if let Err(e) = self.settings.save() {
             eprintln!("stonedgem: saving settings: {e}");
         }
+    }
+
+    /// Read the extension list and rebuild the page scripts. New pages (and
+    /// reloaded ones) get them.
+    fn reload_extensions(&mut self) {
+        self.extensions = stonedgem_extensions::registry::load();
+        self.ext_scripts = stonedgem_extensions::registry::page_scripts(&self.extensions);
+        stonedgem_blocker::blocker::set_extension_filters(stonedgem_extensions::registry::filter_files(&self.extensions));
     }
 
     fn session(&self) -> Session {
@@ -651,6 +673,34 @@ impl Browser {
                     p.set_zoom(if dir == 0 { 1.0 } else { zoom_step(p.zoom(), dir) });
                 }
             }
+            Message::ExtPath(p) => self.ext_path = p,
+            Message::ExtInstall => {
+                let path = std::path::PathBuf::from(self.ext_path.trim());
+                let mut list = stonedgem_extensions::registry::load();
+                self.ext_message = match stonedgem_extensions::registry::install(&path, &mut list) {
+                    Ok(e) => {
+                        stonedgem_extensions::registry::save(&list);
+                        self.ext_path.clear();
+                        format!("Added {}. Reload a page to use it.", e.name)
+                    }
+                    Err(e) => format!("Couldn't add it: {e}"),
+                };
+                self.reload_extensions();
+            }
+            Message::ExtToggle(id) => {
+                let mut list = stonedgem_extensions::registry::load();
+                if let Some(e) = list.iter_mut().find(|e| e.id == id) {
+                    e.enabled = !e.enabled;
+                }
+                stonedgem_extensions::registry::save(&list);
+                self.reload_extensions();
+            }
+            Message::ExtRemove(id) => {
+                let mut list = stonedgem_extensions::registry::load();
+                stonedgem_extensions::registry::remove(&id, &mut list);
+                stonedgem_extensions::registry::save(&list);
+                self.reload_extensions();
+            }
             Message::SetRestore(on) => {
                 self.settings.restore_tabs = on;
                 self.save_settings();
@@ -706,6 +756,14 @@ fn main() -> iced::Result {
     if product() == "OyNIx Next" {
         stonedgem_profile::set_app("oynix-next");
     }
+    // Extension packages: no QML runtime here, so packages with QML panels
+    // are refused with a clear message; no trusted keys yet for .poweroynix.
+    stonedgem_extensions::host::set(stonedgem_extensions::Host {
+        name: product(),
+        trusted_keys: "",
+        check_qml: None,
+        webchannel_js: None,
+    });
     iced::application(Browser::boot, Browser::update, Browser::view)
         .title(Browser::title)
         .subscription(Browser::subscription)

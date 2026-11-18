@@ -30,7 +30,7 @@ Legend: **Works** · **Planned** (phase in [MIGRATION.md](MIGRATION.md)) ·
 | Kind | Status |
 |---|---|
 | Installing, converting and checking packages (all kinds below) | **Works** (`stonedgem-extensions`); running them is what the rows below track |
-| OyNIx extensions: `code.ts` + `content.css` | Planned (6) — user scripts/styles via Servo's `UserContentManager` |
+| OyNIx extensions: `code.ts` + `content.css` | **Works** in the window: injected as Servo user scripts, guarded by their `matches`/`excludes` (WebExtension match patterns) and run at `run_at`; installed, switched and removed in Settings › Extensions |
 | `extra.jsonl` data, `widget.tsx`, `extra.html`, `extra.md` | Planned (6) |
 | `graphics.qt` panels | **Needs migration** to Slint (`.slint`) |
 | `theme.json` browser styles | Planned (5) — mapped to the shared design tokens |

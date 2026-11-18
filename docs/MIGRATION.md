@@ -78,7 +78,20 @@ floating translucent panel over a gradient backdrop, raised/inset touches,
 Checked under Xvfb with `crates/stonedgem-chrome/xvfb-check.sh`, which
 drives every page and takes the screenshots in [screenshots/](screenshots/).
 
-## Phase 6 — extension runtime and Slint panels
+## Phase 6 — extension runtime and Slint panels (in progress)
+
+Done: OyNIx-format extensions' content scripts and styles run in the
+window. `stonedgem-extensions::matching` implements WebExtension match
+patterns (in Rust, and as a JavaScript guard so a script stays correct
+after the page navigates); `registry::page_scripts` gives each enabled
+extension's script wrapped in its guard and `run_at`. Settings ›
+Extensions installs an unpacked `.oynix` folder, switches extensions on
+and off, and removes them. Tested end to end in Servo: the matching
+extension runs after the DOM is ready, another site's doesn't, its
+`content.css` applies.
+
+Next: `network.ts` on the engine's request hook, widgets and extension
+pages, then QML panels as Slint windows and the `chrome.*` APIs.
 
 Content scripts, `network.ts`, widgets and pages on the engine hooks;
 QML panels (`graphics.qt`) rewritten as Slint windows; the `chrome.*`
