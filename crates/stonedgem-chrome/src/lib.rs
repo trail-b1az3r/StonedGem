@@ -5,15 +5,43 @@
 use iced::keyboard::{key::Named, Key as IcedKey, Modifiers};
 use stonedgem_engine::Key;
 
+pub mod downloads;
 pub mod find;
 pub mod palette;
+pub mod session;
 pub mod settings;
 
-/// The page a new tab opens.
-pub const START_PAGE: &str = "data:text/html;charset=utf-8,<!DOCTYPE html><title>New tab</title>\
-<style>body{font:16px sans-serif;background:%23101418;color:%23d8dee6;display:grid;place-items:center;height:90vh;margin:0}\
-h1{font-weight:300;letter-spacing:.06em}p{color:%238a96a3}</style>\
-<div><h1>StonedGem</h1><p>Type an address or a search in the bar above.</p></div>";
+/// The page a new tab opens, titled with the product's name.
+pub fn start_page(product: &str) -> String {
+    format!(
+        "data:text/html;charset=utf-8,<!DOCTYPE html><title>New tab</title>\
+<style>body{{font:16px sans-serif;background:%23101418;color:%23d8dee6;display:grid;place-items:center;height:90vh;margin:0}}\
+h1{{font-weight:300;letter-spacing:.06em}}p{{color:%238a96a3}}</style>\
+<div><h1>{}</h1><p>Type an address or a search in the bar above.</p></div>",
+        product.replace('<', "").replace('%', "%25").replace('#', "%23")
+    )
+}
+
+/// Zoom steps, as browsers usually offer them.
+pub const ZOOM_STEPS: &[f32] = &[0.3, 0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0];
+
+/// The next zoom step up (`dir` 1) or down (-1) from `z`.
+pub fn zoom_step(z: f32, dir: i32) -> f32 {
+    if dir > 0 {
+        ZOOM_STEPS.iter().copied().find(|s| *s > z + 0.001).unwrap_or(5.0)
+    } else {
+        ZOOM_STEPS.iter().rev().copied().find(|s| *s < z - 0.001).unwrap_or(0.3)
+    }
+}
+
+/// What the page has under the pointer (CSS pixels), for the right-click
+/// menu. The page answers three lines: link, image, selected text.
+pub fn element_at_script(x: f32, y: f32) -> String {
+    format!(
+        "(function(x,y){{var e=document.elementFromPoint(x,y),a=e&&e.closest&&e.closest('a[href]'),i=e&&e.closest&&e.closest('img');\
+         return [a?a.href:'',i?(i.currentSrc||i.src):'',String(getSelection()).replace(/\\n/g,' ').slice(0,2000)].join('\\n');}})({x},{y})"
+    )
+}
 
 /// Search engine used for text that isn't an address, unless settings say otherwise.
 pub const SEARCH: &str = "duckduckgo";
@@ -23,16 +51,18 @@ pub const SEARCH: &str = "duckduckgo";
 pub enum Internal {
     History,
     Bookmarks,
+    Downloads,
     Settings,
 }
 
 impl Internal {
-    pub const ALL: [Internal; 3] = [Internal::History, Internal::Bookmarks, Internal::Settings];
+    pub const ALL: [Internal; 4] = [Internal::History, Internal::Bookmarks, Internal::Downloads, Internal::Settings];
 
     pub fn address(self) -> &'static str {
         match self {
             Internal::History => "stonedgem://history",
             Internal::Bookmarks => "stonedgem://bookmarks",
+            Internal::Downloads => "stonedgem://downloads",
             Internal::Settings => "stonedgem://settings",
         }
     }
@@ -41,6 +71,7 @@ impl Internal {
         match self {
             Internal::History => "History",
             Internal::Bookmarks => "Bookmarks",
+            Internal::Downloads => "Downloads",
             Internal::Settings => "Settings",
         }
     }
@@ -131,6 +162,10 @@ pub enum Shortcut {
     Bookmark,
     Bookmarks,
     Settings,
+    Downloads,
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
     Reload,
     Back,
     Forward,
@@ -151,6 +186,10 @@ pub fn shortcut(key: &IcedKey, m: Modifiers) -> Option<Shortcut> {
             "d" => Some(Shortcut::Bookmark),
             "o" if m.shift() => Some(Shortcut::Bookmarks),
             "," => Some(Shortcut::Settings),
+            "j" => Some(Shortcut::Downloads),
+            "=" | "+" => Some(Shortcut::ZoomIn),
+            "-" => Some(Shortcut::ZoomOut),
+            "0" => Some(Shortcut::ZoomReset),
             _ => None,
         },
         IcedKey::Named(Named::F5) => Some(Shortcut::Reload),
@@ -203,7 +242,13 @@ mod tests {
         assert!(recordable("https://a.b/") && !recordable("data:text/html,x"));
         assert_eq!(ago(100, 100), "just now");
         assert_eq!(ago(0, 7200), "2 h ago");
-        assert_eq!(url_to_address(START_PAGE), "");
+        assert_eq!(zoom_step(1.0, 1), 1.1);
+        assert_eq!(zoom_step(1.0, -1), 0.9);
+        assert_eq!(zoom_step(5.0, 1), 5.0);
+        assert_eq!(zoom_step(1.05, -1), 1.0);
+        assert_eq!(Internal::from_address("stonedgem://downloads"), Some(Internal::Downloads));
+        assert_eq!(url_to_address(&start_page("StonedGem")), "");
+        assert!(start_page("OyNIx Next").contains("<h1>OyNIx Next</h1>"));
         assert_eq!(url_to_address("https://example.com/a?b=1"), "https://example.com/a?b=1");
     }
 
@@ -222,6 +267,8 @@ mod tests {
         let t = IcedKey::Character("t".into());
         assert_eq!(shortcut(&t, ctrl), Some(Shortcut::NewTab));
         assert_eq!(shortcut(&IcedKey::Character("f".into()), ctrl), Some(Shortcut::Find));
+        assert_eq!(shortcut(&IcedKey::Character("=".into()), ctrl), Some(Shortcut::ZoomIn));
+        assert_eq!(shortcut(&IcedKey::Character("0".into()), ctrl), Some(Shortcut::ZoomReset));
         assert_eq!(shortcut(&IcedKey::Character("O".into()), ctrl | Modifiers::SHIFT), Some(Shortcut::Bookmarks));
         assert_eq!(shortcut(&t, Modifiers::empty()), None);
         assert_eq!(page_key(&t, Some("t"), Modifiers::empty()), Some(Key::Text("t".into())));

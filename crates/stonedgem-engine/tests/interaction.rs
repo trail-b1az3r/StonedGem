@@ -64,6 +64,23 @@ fn frames_input_and_history() {
     assert!(engine.wait(Duration::from_secs(20), || page.title().as_deref() == Some("clicked") || page.title().as_deref() == Some("One")));
     assert!(page.take_changed());
 
+    // Zoom: CSS pixels get bigger, so the viewport gets narrower.
+    let before = page.eval(&engine, "window.innerWidth", Duration::from_secs(5));
+    page.set_zoom(2.0);
+    assert!((page.zoom() - 2.0).abs() < 1e-3);
+    let mut zoomed = false;
+    for _ in 0..100 {
+        let _ = page.frame(&engine); // zoom applies when the page paints
+        if page.eval(&engine, "window.devicePixelRatio >= 2 && window.innerWidth <= 200", Duration::from_secs(5)) == Ok(Value::Boolean(true)) {
+            zoomed = true;
+            break;
+        }
+        engine.wait(Duration::from_millis(25), || false);
+    }
+    let now = page.eval(&engine, "[window.devicePixelRatio, window.innerWidth, document.documentElement.clientWidth]", Duration::from_secs(5));
+    assert!(zoomed, "zoom didn't change the page (innerWidth was {before:?}, now {now:?}, zoom {})", page.zoom());
+    page.set_zoom(1.0);
+
     page.hide();
     switching_pages_switches_frames(&engine);
 }

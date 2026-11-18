@@ -18,6 +18,8 @@ pub struct Settings {
     pub blocker: bool,
     /// Element hiding (cosmetic filtering).
     pub hide_elements: bool,
+    /// Reopen the last session's tabs on start.
+    pub restore_tabs: bool,
 }
 
 impl Default for Settings {
@@ -29,6 +31,7 @@ impl Default for Settings {
             accent: "#2f7cf6".into(),
             blocker: true,
             hide_elements: true,
+            restore_tabs: true,
         }
     }
 }

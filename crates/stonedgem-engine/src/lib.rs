@@ -165,6 +165,9 @@ pub struct Engine {
 impl Engine {
     /// An engine that renders into memory (no window), `width`×`height`.
     pub fn headless(width: u32, height: u32) -> Result<Self, String> {
+        // Choose Servo's TLS backend for the process before anything
+        // connects (fails harmlessly if the product already chose one).
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         let context = Rc::new(
             SoftwareRenderingContext::new(dpi::PhysicalSize { width, height })
                 .map_err(|e| format!("software rendering: {e:?}"))?,
@@ -305,6 +308,17 @@ impl Page {
     pub fn hide(&self) {
         self.webview.set_focused(false);
         self.webview.hide();
+    }
+
+    /// Page zoom, 1.0 = 100 %.
+    pub fn zoom(&self) -> f32 {
+        self.webview.page_zoom()
+    }
+
+    /// Set the page zoom (clamped to 30 %–500 %).
+    pub fn set_zoom(&self, zoom: f32) {
+        self.webview.set_page_zoom(zoom.clamp(0.3, 5.0));
+        self.state.new_frame.set(true);
     }
 
     pub fn can_go_back(&self) -> bool {
