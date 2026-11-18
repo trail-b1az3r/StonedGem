@@ -16,5 +16,6 @@ pub mod matching;
 pub use stonedgem_theme::material;
 pub mod registry;
 pub mod tscompile;
+pub mod zscript;
 
 pub use host::Host;

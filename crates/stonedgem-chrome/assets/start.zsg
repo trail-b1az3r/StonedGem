@@ -1,0 +1,17 @@
+// The start page's backdrop art, as a Z#++ fragment shader.
+func band(y: float, center: float, width: float) -> float {
+    return smoothstep(width, 0.0, abs(y - center))
+}
+
+fragment hero(uv: vec2, uniform seed: float) -> color {
+    var c = vec3(0.06, 0.07, 0.10)
+    for i in 0..3 {
+        let fi = float(i)
+        let center = 0.42 + 0.13 * fi + 0.06 * sin(uv.x * 5.0 + seed + fi * 1.7)
+        let tint = mix(vec3(0.18, 0.49, 0.96), vec3(0.50, 0.85, 1.00), fi / 2.0)
+        c += tint * band(uv.y, center, 0.10) * 0.55
+    }
+    // Fade to the page colour at the bottom.
+    let fade = smoothstep(0.65, 1.0, uv.y)
+    return vec4(mix(c, vec3(0.06, 0.07, 0.09), fade), 1.0)
+}

@@ -10,14 +10,18 @@ pub mod find;
 pub mod palette;
 pub mod session;
 pub mod settings;
+pub mod zs_hooks;
 
 /// The page a new tab opens, titled with the product's name.
 pub fn start_page(product: &str) -> String {
+    // The banner is drawn by Z#++ (assets/start.zsp + start.zsg).
+    let hero = zs_hooks::hero_data_url();
     format!(
         "data:text/html;charset=utf-8,<!DOCTYPE html><title>New tab</title>\
-<style>body{{font:16px sans-serif;background:%23101418;color:%23d8dee6;display:grid;place-items:center;height:90vh;margin:0}}\
-h1{{font-weight:300;letter-spacing:.06em}}p{{color:%238a96a3}}</style>\
-<div><h1>{}</h1><p>Type an address or a search in the bar above.</p></div>",
+<style>body{{font:16px sans-serif;background:%23101418;color:%23d8dee6;margin:0;height:100vh;overflow:hidden}}\
+.hero{{height:240px;background:%23101418 url({hero}) center/cover no-repeat;display:flex;align-items:flex-end;padding:0 48px 28px}}\
+h1{{font-weight:300;letter-spacing:.06em;font-size:42px;margin:0}}p{{color:%238a96a3;margin:24px 48px}}</style>\
+<div class=hero><h1>{}</h1></div><p>Type an address or a search in the bar above.</p>",
         product.replace('<', "").replace('%', "%25").replace('#', "%23")
     )
 }
@@ -53,10 +57,12 @@ pub enum Internal {
     Bookmarks,
     Downloads,
     Settings,
+    /// The Z#++ playground.
+    Zsharp,
 }
 
 impl Internal {
-    pub const ALL: [Internal; 4] = [Internal::History, Internal::Bookmarks, Internal::Downloads, Internal::Settings];
+    pub const ALL: [Internal; 5] = [Internal::History, Internal::Bookmarks, Internal::Downloads, Internal::Settings, Internal::Zsharp];
 
     pub fn address(self) -> &'static str {
         match self {
@@ -64,6 +70,7 @@ impl Internal {
             Internal::Bookmarks => "stonedgem://bookmarks",
             Internal::Downloads => "stonedgem://downloads",
             Internal::Settings => "stonedgem://settings",
+            Internal::Zsharp => "stonedgem://zsharp",
         }
     }
 
@@ -73,15 +80,17 @@ impl Internal {
             Internal::Bookmarks => "Bookmarks",
             Internal::Downloads => "Downloads",
             Internal::Settings => "Settings",
+            Internal::Zsharp => "Z#++",
         }
     }
 
     /// The internal page typed text names, e.g. `stonedgem://history` or `about:settings`.
     pub fn from_address(text: &str) -> Option<Internal> {
         let t = text.trim().to_ascii_lowercase();
-        let name = t.strip_prefix("stonedgem://").or_else(|| t.strip_prefix("about:"))?;
-        Internal::ALL.into_iter().find(|i| i.title().eq_ignore_ascii_case(name.trim_end_matches('/')))
+        let name = t.strip_prefix("stonedgem://").or_else(|| t.strip_prefix("about:"))?.trim_end_matches('/').to_string();
+        Internal::ALL.into_iter().find(|i| i.address().trim_start_matches("stonedgem://") == name)
     }
+
 }
 
 /// What a tab shows in the tab strip.

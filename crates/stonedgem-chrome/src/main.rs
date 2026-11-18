@@ -122,6 +122,14 @@ pub struct Browser {
     pub ext_message: String,
     /// Held modifier keys (text fields swallow some Ctrl shortcuts as text).
     modifiers: keyboard::Modifiers,
+    /// Enabled extensions' Z#++ scripts.
+    pub zs: stonedgem_chrome::zs_hooks::Scripts,
+    /// A short message at the bottom of the window, until the tick given.
+    pub toast: Option<(String, u64)>,
+    /// The Z#++ playground.
+    pub zs_editor: iced::widget::text_editor::Content,
+    pub zs_output: String,
+    pub zs_frame: Option<image::Handle>,
 }
 
 #[derive(Debug, Clone)]
@@ -157,6 +165,9 @@ pub enum Message {
     Zoom(i32),
     SetRestore(bool),
     Modifiers(keyboard::Modifiers),
+    ZsEdit(iced::widget::text_editor::Action),
+    ZsRun,
+    DismissToast,
     ExtPath(String),
     ExtInstall,
     ExtToggle(String),
@@ -213,6 +224,11 @@ impl Browser {
             ext_path: String::new(),
             ext_message: String::new(),
             modifiers: keyboard::Modifiers::empty(),
+            zs: Default::default(),
+            toast: None,
+            zs_editor: iced::widget::text_editor::Content::with_text(stonedgem_chrome::zs_hooks::PLAYGROUND_SAMPLE),
+            zs_output: String::new(),
+            zs_frame: None,
         };
         b.reload_extensions();
         match Session::load().filter(|_| b.settings.restore_tabs) {
@@ -258,6 +274,9 @@ impl Browser {
         if let Some(i) = self.tabs.iter().position(|t| t.internal() == Some(page)) {
             self.select(i);
             return;
+        }
+        if page == Internal::Zsharp && self.zs_output.is_empty() {
+            self.run_playground();
         }
         let info = TabInfo { title: page.title().into(), url: page.address().into(), loading: false };
         self.tabs.push(Tab { content: Content::Internal(page), info, recorded: String::new() });
@@ -353,6 +372,37 @@ impl Browser {
         self.extensions = stonedgem_extensions::registry::load();
         self.ext_scripts = stonedgem_extensions::registry::page_scripts(&self.extensions);
         stonedgem_blocker::blocker::set_extension_filters(stonedgem_extensions::registry::filter_files(&self.extensions));
+        self.zs = stonedgem_chrome::zs_hooks::Scripts::load(&self.extensions);
+    }
+
+    fn notify(&mut self, text: impl Into<String>) {
+        self.toast = Some((text.into(), self.ticks + 240));
+    }
+
+    /// Run the Z#++ playground's program and show its output and canvas.
+    fn run_playground(&mut self) {
+        let src = self.zs_editor.text();
+        let result = stonedgem_zsharp::Program::from_source(&src).and_then(|mut p| {
+            let r = p.run_main();
+            let out = p.output();
+            r.map(|_| (out, p))
+        });
+        match result {
+            Ok((out, p)) => {
+                self.zs_output = if out.is_empty() { "(ran; printed nothing)".into() } else { out };
+                self.zs_frame = ["canvas", "screen"].iter().find_map(|g| match p.interp.global(g) {
+                    Some(stonedgem_zsharp::Value::Object(o)) => o
+                        .as_any()
+                        .downcast_ref::<stonedgem_zsharp::canvas::Canvas>()
+                        .map(|c| image::Handle::from_rgba(c.width(), c.height(), c.rgba())),
+                    _ => None,
+                });
+            }
+            Err(e) => {
+                self.zs_output = format!("Error: {e}");
+                self.zs_frame = None;
+            }
+        }
     }
 
     fn session(&self) -> Session {
@@ -415,15 +465,35 @@ impl Browser {
                         }
                         if !t.info.loading && recordable(&t.info.url) && t.recorded != t.info.url {
                             t.recorded = t.info.url.clone();
-                            visits.push((t.info.url.clone(), t.info.title.clone()));
+                            visits.push((i, t.info.url.clone(), t.info.title.clone()));
                         }
                     }
                 }
-                for (url, title) in visits {
+                for (i, url, title) in visits {
                     self.library.record_visit(&url, &title);
+                    // Extensions' Z#++ `page_load` handlers.
+                    if !self.zs.is_empty() {
+                        for (_ext, action) in self.zs.page_loaded(&url, &title) {
+                            use stonedgem_chrome::zs_hooks::{css_js, Action};
+                            let js = match action {
+                                Action::RunJs(js) => js,
+                                Action::Css(css) => css_js(&css),
+                                Action::Notify(t) => {
+                                    self.notify(t);
+                                    continue;
+                                }
+                            };
+                            if let Some(Tab { content: Content::Web(p), .. }) = self.tabs.get(i) {
+                                let _ = p.eval(&self.engine, &js, Duration::from_secs(2));
+                            }
+                        }
+                    }
                 }
                 if self.ticks.is_multiple_of(300) {
                     self.library.flush();
+                }
+                if self.toast.as_ref().is_some_and(|(_, until)| self.ticks >= *until) {
+                    self.toast = None;
                 }
                 if self.ticks.is_multiple_of(120) {
                     self.save_session();
@@ -462,6 +532,12 @@ impl Browser {
                 self.editing = true;
             }
             Message::Modifiers(m) => self.modifiers = m,
+            Message::ZsEdit(a) => {
+                self.editing = true;
+                self.zs_editor.perform(a);
+            }
+            Message::ZsRun => self.run_playground(),
+            Message::DismissToast => self.toast = None,
             Message::Go => {
                 if let Some(page) = Internal::from_address(&self.address) {
                     self.open_internal(page);
@@ -551,6 +627,7 @@ impl Browser {
                 if page == Internal::History {
                     self.focus_next = Some(HISTORY_SEARCH);
                 }
+
             }
             Message::ToggleBookmark => {
                 if let Some(t) = self.tab().filter(|t| t.page().is_some() && recordable(&t.info.url)) {

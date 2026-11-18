@@ -8529,6 +8529,7 @@ dependencies = [
  "stonedgem-profile",
  "stonedgem-theme",
  "stonedgem-url",
+ "stonedgem-zsharp",
  "ureq",
 ]
 
@@ -8559,6 +8560,7 @@ dependencies = [
  "stonedgem-poweroynix",
  "stonedgem-profile",
  "stonedgem-theme",
+ "stonedgem-zsharp",
  "zip",
 ]
 

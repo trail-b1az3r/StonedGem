@@ -7,11 +7,11 @@
 
 use iced::border::Radius;
 use iced::font::Weight;
-use iced::gradient::Linear;
+
 use iced::widget::{
     button, column, container, image, mouse_area, pick_list, row, scrollable, space, stack, text, text_input, toggler,
 };
-use iced::{Alignment, Background, Border, Color, Element, Font, Gradient, Length, Padding, Shadow, Theme, Vector};
+use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding, Shadow, Theme, Vector};
 
 use stonedgem_chrome::downloads::State as DlState;
 use stonedgem_chrome::palette::Palette;
@@ -287,7 +287,56 @@ pub fn view(b: &Browser) -> Element<'_, Message> {
         ]
         .into();
     }
-    base.into()
+    match &b.toast {
+        Some((t, _)) => stack![base, toast(p, t)].into(),
+        None => base.into(),
+    }
+}
+
+/// A glass capsule at the bottom centre with a short message.
+fn toast<'a>(p: Palette, t: &str) -> Element<'a, Message> {
+    let pill = button(text(t.to_string()).size(14).color(p.on_surface))
+        .on_press(Message::DismissToast)
+        .padding(Padding::from([10, 18]))
+        .style(move |_: &Theme, _s| button::Style {
+            background: Some(Background::Color(alpha(p.surface_container, 0.96))),
+            text_color: p.on_surface,
+            border: Border { radius: radius(22.0), width: 1.0, color: glass_rim(p) },
+            shadow: shadow(8.0, 24.0, if p.dark { 0.45 } else { 0.18 }),
+            ..Default::default()
+        });
+    container(pill).width(Length::Fill).height(Length::Fill).align_x(Alignment::Center).align_y(Alignment::End).padding(24).into()
+}
+
+/// The Z#++ playground: an editor, Run, the output and the canvas.
+fn playground(b: &Browser) -> Element<'_, Message> {
+    let p = b.palette;
+    let editor = iced::widget::text_editor(&b.zs_editor)
+        .on_action(Message::ZsEdit)
+        .height(Length::Fill)
+        .size(14)
+        .font(Font::MONOSPACE)
+        .padding(14);
+    let head = row![
+        column![text("Z#++ playground").size(28).font(HEAVY).color(p.on_surface), text(".zsp code · Canvas 2D · imports need files, so use one program here").size(13).color(p.on_surface_variant)].spacing(2),
+        space().width(Length::Fill),
+        button(text("Run").size(14)).on_press(Message::ZsRun).padding(Padding::from([10, 24])).style(filled(p)),
+    ]
+    .align_y(Alignment::Center);
+    let preview: Element<'_, Message> = match &b.zs_frame {
+        Some(h) => container(image(h.clone()).content_fit(iced::ContentFit::Contain)).width(Length::Fill).height(Length::Fill).center(Length::Fill).into(),
+        None => container(text("Draw on a canvas called `canvas` (or `screen`) to see it here.").size(13).color(p.on_surface_variant)).center(Length::Fill).into(),
+    };
+    let out = scrollable(text(b.zs_output.clone()).size(13).font(Font::MONOSPACE).color(p.on_surface)).height(Length::Fill);
+    let right = column![
+        container(preview).height(Length::FillPortion(3)).width(Length::Fill).padding(8).style(move |_: &Theme| card_style(p)),
+        container(out).height(Length::FillPortion(2)).width(Length::Fill).padding(14).style(move |_: &Theme| card_style(p)),
+    ]
+    .spacing(12);
+    let body = row![container(editor).width(Length::FillPortion(1)).height(Length::Fill).style(move |_: &Theme| card_style(p)), container(right).width(Length::FillPortion(1))]
+        .spacing(12)
+        .height(Length::Fill);
+    container(column![head, body].spacing(16)).padding(20).width(Length::Fill).height(Length::Fill).into()
 }
 
 fn tab_strip(b: &Browser) -> Element<'_, Message> {
@@ -485,6 +534,7 @@ fn menu(b: &Browser) -> Element<'_, Message> {
         menu_item(p, "Bookmarks", "Ctrl+Shift+O", Some(Message::Open(Internal::Bookmarks))),
         menu_item(p, "Downloads", "Ctrl+J", Some(Message::Open(Internal::Downloads))),
         menu_item(p, "Settings", "Ctrl+,", Some(Message::Open(Internal::Settings))),
+        menu_item(p, "Z#++ playground", "", Some(Message::Open(Internal::Zsharp))),
         menu_divider(p),
         menu_item(p, "Quit", "", Some(Message::Quit)),
     ]
@@ -546,6 +596,7 @@ fn content(b: &Browser) -> Element<'_, Message> {
                 Internal::Bookmarks => bookmarks(b),
                 Internal::Downloads => downloads(b),
                 Internal::Settings => settings(b),
+                Internal::Zsharp => return playground(b),
             };
             scrollable(container(container(body).max_width(760)).width(Length::Fill).align_x(Alignment::Center).padding(Padding::from([24, 24])))
                 .width(Length::Fill)
@@ -747,7 +798,10 @@ fn settings(b: &Browser) -> Element<'_, Message> {
         ext = ext.push(text("No extensions yet. Add an unpacked .oynix folder below.").size(14).color(p.on_surface_variant));
     }
     for e in &b.extensions {
-        let note = if e.kind == "oynix" { format!("{} · {}", e.version, if e.matches.is_empty() { "no pages".to_string() } else { e.matches.join(", ") }) } else { format!("{} · needs WebExtensions (not in this preview)", e.version) };
+        let mut note = if e.kind == "oynix" { format!("{} · {}", e.version, if e.matches.is_empty() { "no pages".to_string() } else { e.matches.join(", ") }) } else { format!("{} · needs WebExtensions (not in this preview)", e.version) };
+        if e.has_script {
+            note.push_str(" · Z#++ script");
+        }
         ext = ext.push(
             row![
                 column![text(e.name.clone()).size(15).color(p.on_surface), text(note).size(12).color(p.on_surface_variant).wrapping(iced::widget::text::Wrapping::None)].spacing(2).width(Length::Fill),
@@ -772,6 +826,9 @@ fn settings(b: &Browser) -> Element<'_, Message> {
     );
     if !b.ext_message.is_empty() {
         ext = ext.push(text(b.ext_message.clone()).size(13).color(p.on_surface_variant));
+    }
+    for err in &b.zs.errors {
+        ext = ext.push(text(format!("Script not loaded: {err}")).size(13).color(p.error));
     }
 
     column![

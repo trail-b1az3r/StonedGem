@@ -76,6 +76,8 @@ pub struct Entry {
     pub has_theme: bool,
     /// Has `widget.tsx` (a card on the Start Page).
     pub has_widget: bool,
+    /// Has `script.zsp`, a Z#++ program run on page loads (see zscript.rs).
+    pub has_script: bool,
     /// Power only: has `theme-shape.qml` (draws the browser's shapes).
     pub has_shape: bool,
     /// Power only: has `network.ts` (runs in the background, see netrules.rs).
@@ -1295,6 +1297,10 @@ fn prepare_oynix(dir: &Path, e: &mut Entry, power: bool) -> Result<(), String> {
     e.has_widget = dir.join("widget.tsx").exists();
     if e.has_widget {
         compile_widget(dir)?;
+    }
+    e.has_script = crate::zscript::has_script(dir);
+    if e.has_script {
+        crate::zscript::check(dir)?;
     }
     e.permissions = match v.get("permissions") {
         None => vec![],
