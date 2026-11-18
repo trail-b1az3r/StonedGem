@@ -1,0 +1,12 @@
+[package]
+name = "stonedgem-zsharp"
+description = "Z#++: a sandboxed, extended Z# for StonedGem — .zsp programs, .zsx headers, .zsg GPU kernels/shaders (WGSL + CPU reference), and a 2D canvas."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd", "png-format"] }
+naga = { version = "27", features = ["wgsl-in"] }
