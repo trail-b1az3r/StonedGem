@@ -25,8 +25,8 @@ use stonedgem_chrome::{
 use stonedgem_engine::{Engine, Load, Page};
 use stonedgem_library::Library;
 
-/// Tab strip plus toolbar, above the page.
-pub const CHROME_HEIGHT: f32 = 104.0;
+/// The glass bar above the page: specular line, toolbar (56), tabs (40), hairline.
+pub const CHROME_HEIGHT: f32 = 98.0;
 /// The find bar, when open.
 pub const FIND_HEIGHT: f32 = 44.0;
 pub const ADDRESS: &str = "address";

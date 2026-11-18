@@ -25,10 +25,8 @@ const HEAVY: Font = Font { weight: Weight::Bold, ..Font::DEFAULT };
 
 // ── Tokens (docs/DESIGN.md) ──────────────────────────────────────────
 
-/// Gap between the window edge and the floating panel.
-pub const PANEL_MARGIN: f32 = 8.0;
 const TAB_ROW: f32 = 40.0;
-const TOOL_ROW: f32 = 48.0;
+const TOOL_ROW: f32 = 56.0;
 const TARGET: f32 = 40.0;
 
 fn radius(r: f32) -> Radius {
@@ -71,45 +69,49 @@ fn state(p: Palette, base: Option<Color>, s: button::Status) -> Option<Backgroun
     }
 }
 
-/// The page backdrop: something for the glass panel to sit on.
+/// The window backdrop: the plain surface (no gradient).
 fn backdrop(p: Palette) -> container::Style {
-    let g = Linear::new(2.35)
-        .add_stop(0.0, mix(p.surface, p.primary, if p.dark { 0.16 } else { 0.12 }))
-        .add_stop(0.55, p.surface)
-        .add_stop(1.0, mix(p.surface, p.tertiary, if p.dark { 0.10 } else { 0.08 }));
-    container::Style { background: Some(Background::Gradient(Gradient::Linear(g))), ..Default::default() }
+    container::Style { background: Some(Background::Color(p.surface)), ..Default::default() }
 }
 
-fn glass(p: Palette, r: f32) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(alpha(p.surface_high, if p.dark { 0.72 } else { 0.74 }))),
-        border: Border { radius: radius(r), width: 1.0, color: highlight(p) },
-        ..Default::default()
+// ── Liquid Glass (docs/DESIGN.md) ────────────────────────────────────
+
+/// Translucent glass for controls in use (hovered buttons, tabs).
+fn glass_fill(p: Palette) -> Color {
+    alpha(p.surface_highest, if p.dark { 0.55 } else { 0.62 })
+}
+
+/// Glass at rest that must stay legible (address field, selected tab).
+fn glass_strong(p: Palette) -> Color {
+    alpha(p.surface_highest, if p.dark { 0.78 } else { 0.86 })
+}
+
+/// The light rim around glass.
+fn glass_rim(p: Palette) -> Color {
+    if p.dark {
+        alpha(Color::WHITE, 0.14)
+    } else {
+        alpha(p.outline_variant, 0.65)
     }
 }
 
-/// The panel's soft "contact shadow": a gradient strip in the gap under it.
-/// (A real drop shadow gets repainted over the panel by Iced's CPU renderer
-/// when it redraws part of the window.)
-fn contact_shadow(p: Palette) -> container::Style {
-    let g = Linear::new(std::f32::consts::PI)
-        .add_stop(0.0, alpha(Color::BLACK, if p.dark { 0.28 } else { 0.10 }))
-        .add_stop(1.0, alpha(Color::BLACK, 0.0));
-    container::Style {
-        background: Some(Background::Gradient(Gradient::Linear(g))),
-        border: Border { radius: Radius { top_left: 0.0, top_right: 0.0, bottom_right: 12.0, bottom_left: 12.0 }, ..Default::default() },
-        ..Default::default()
+/// The bright specular line along the top edge of glass.
+fn specular(p: Palette) -> Color {
+    if p.dark {
+        alpha(Color::WHITE, 0.20)
+    } else {
+        alpha(Color::WHITE, 0.95)
     }
 }
 
-/// Softly raised: a lighter tone and a light edge. (No drop shadow: Iced's
-/// CPU renderer smears small shadows inside a row across the whole row.)
-fn raised(p: Palette, r: f32) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(if p.dark { mix(p.surface_highest, Color::WHITE, 0.04) } else { mix(p.surface_highest, Color::WHITE, 0.55) })),
-        border: Border { radius: radius(r), width: 1.0, color: if p.dark { alpha(Color::WHITE, 0.16) } else { alpha(p.outline_variant, 0.9) } },
-        ..Default::default()
-    }
+/// The translucent toolbar/tab bar.
+fn glass_bar(p: Palette) -> container::Style {
+    container::Style { background: Some(Background::Color(alpha(p.surface_container, if p.dark { 0.88 } else { 0.86 }))), ..Default::default() }
+}
+
+/// A 1 px line in `c`, full width.
+fn line<'a>(c: Color) -> Element<'a, Message> {
+    container(space()).width(Length::Fill).height(1).style(move |_: &Theme| container::Style { background: Some(Background::Color(c)), ..Default::default() }).into()
 }
 
 /// Cards inside scrolling pages: raised by tone and a light edge only.
@@ -150,8 +152,20 @@ fn icon<'a>(p: Palette, glyph: &'a str, msg: Option<Message>) -> Element<'a, Mes
         .padding(0)
         .on_press_maybe(msg)
         .style(move |_: &Theme, s: button::Status| {
+            // Liquid Glass: clear at rest, a glass capsule with a rim under the pointer.
             let text_color = if s == button::Status::Disabled { alpha(p.on_surface_variant, 0.38) } else { p.on_surface_variant };
-            button::Style { background: state(p, None, s), text_color, border: Border { radius: radius(TARGET / 2.0), ..Default::default() }, ..Default::default() }
+            let glassy = matches!(s, button::Status::Hovered | button::Status::Pressed);
+            let bg = match s {
+                button::Status::Hovered => Some(Background::Color(glass_fill(p))),
+                button::Status::Pressed => Some(Background::Color(glass_strong(p))),
+                _ => None,
+            };
+            button::Style {
+                background: bg,
+                text_color,
+                border: Border { radius: radius(TARGET / 2.0), width: if glassy { 1.0 } else { 0.0 }, color: glass_rim(p) },
+                ..Default::default()
+            }
         })
         .into()
 }
@@ -240,19 +254,16 @@ fn chip<'a>(p: Palette, label: String, msg: Message, live: bool) -> Element<'a, 
 
 pub fn view(b: &Browser) -> Element<'_, Message> {
     let p = b.palette;
-    let mut panel = column![tab_strip(b), toolbar(b)];
+    // The classic layout: a full-width translucent bar holding the toolbar,
+    // then the tabs (and the find bar), with a specular line on top and a
+    // hairline below.
+    let mut bar = column![line(specular(p)), container(toolbar(b)).padding(Padding::from([0, 8])), container(tab_strip(b)).padding(Padding::from([0, 8]))];
     if b.find.is_some() {
-        panel = panel.push(find_bar(b));
+        bar = bar.push(container(find_bar(b)).padding(Padding::from([0, 8])));
     }
-    let glass_panel = container(panel).padding(Padding { top: 0.0, right: 8.0, bottom: 0.0, left: 8.0 }).style(move |_: &Theme| glass(p, 22.0));
-    let under = container(container(space()).width(Length::Fill).height(PANEL_MARGIN).style(move |_: &Theme| contact_shadow(p)))
-        .padding(Padding { top: 0.0, right: 24.0, bottom: 0.0, left: 24.0 });
-    let panel = column![
-        container(glass_panel).padding(Padding { top: PANEL_MARGIN, right: PANEL_MARGIN, bottom: 0.0, left: PANEL_MARGIN }),
-        under
-    ];
+    let bar = container(column![bar, line(alpha(p.outline_variant, 0.7))]).style(move |_: &Theme| glass_bar(p));
 
-    let main = column![panel, content(b)];
+    let main = column![bar, content(b)];
     let base = container(main).width(Length::Fill).height(Length::Fill).style(move |_: &Theme| backdrop(p));
 
     let chrome = CHROME_HEIGHT + if b.find.is_some() { FIND_HEIGHT } else { 0.0 };
@@ -311,12 +322,20 @@ fn tab_strip(b: &Browser) -> Element<'_, Message> {
             .height(32)
             .padding(Padding { top: 0.0, right: 5.0, bottom: 0.0, left: 12.0 })
             .align_y(Alignment::Center);
-        // The selected tab is raised (neumorphic); the others sit flat on the glass.
-        let pill = if active { pill.style(move |_: &Theme| raised(p, 16.0)) } else { pill };
+        // Liquid Glass: the selected tab is a glass pill with a rim.
+        let pill = if active {
+            pill.style(move |_: &Theme| container::Style {
+                background: Some(Background::Color(glass_strong(p))),
+                border: Border { radius: radius(16.0), width: 1.0, color: glass_rim(p) },
+                ..Default::default()
+            })
+        } else {
+            pill
+        };
         strip = strip.push(pill);
     }
     strip = strip.push(icon(p, "+", Some(Message::NewTab)));
-    container(strip).width(Length::Fill).height(TAB_ROW).align_y(Alignment::End).into()
+    container(strip).width(Length::Fill).height(TAB_ROW).align_y(Alignment::Center).into()
 }
 
 fn toolbar(b: &Browser) -> Element<'_, Message> {
@@ -347,12 +366,14 @@ fn toolbar(b: &Browser) -> Element<'_, Message> {
     if web {
         pill = pill.push(icon(p, if starred { "★" } else { "☆" }, Some(Message::ToggleBookmark)));
     }
-    // The address capsule is softly inset into the glass.
-    let pill = container(pill).width(Length::Fill).height(TARGET).align_y(Alignment::Center).style(move |_: &Theme| container::Style {
-        background: Some(Background::Color(alpha(p.surface_lowest, if p.dark { 0.55 } else { 0.65 }))),
-        border: Border { radius: radius(TARGET / 2.0), width: 1.0, color: alpha(p.outline_variant, 0.7) },
+    // Liquid Glass: the address field is a glass capsule with a rim and a
+    // specular line along its top.
+    let capsule = container(pill).width(Length::Fill).height(TARGET).align_y(Alignment::Center).style(move |_: &Theme| container::Style {
+        background: Some(Background::Color(glass_strong(p))),
+        border: Border { radius: radius(TARGET / 2.0), width: 1.0, color: glass_rim(p) },
         ..Default::default()
     });
+    let pill = stack![capsule, container(line(specular(p))).padding(Padding { top: 1.0, right: TARGET / 2.0, bottom: 0.0, left: TARGET / 2.0 })];
 
     let mut right = row![].spacing(6).align_y(Alignment::Center);
     let zoom = page.map(|x| x.zoom()).unwrap_or(1.0);
