@@ -14,18 +14,21 @@ use std::time::Duration;
 use iced::widget::image;
 use iced::{keyboard, mouse, time, window, Element, Point, Size, Subscription, Task, Theme};
 
+use stonedgem_chrome::downloads::Downloads;
 use stonedgem_chrome::palette::Palette;
+use stonedgem_chrome::session::Session;
 use stonedgem_chrome::settings::Settings;
 use stonedgem_chrome::{
-    address_to_url, after_close, find, page_key, recordable, shortcut, url_to_address, Internal, Shortcut, TabInfo, START_PAGE,
+    address_to_url, after_close, element_at_script, find, page_key, recordable, shortcut, url_to_address, zoom_step, Internal,
+    start_page, Shortcut, TabInfo,
 };
 use stonedgem_engine::{Engine, Load, Page};
 use stonedgem_library::Library;
 
 /// Tab strip plus toolbar, above the page.
-pub const CHROME_HEIGHT: f32 = 84.0;
+pub const CHROME_HEIGHT: f32 = 104.0;
 /// The find bar, when open.
-pub const FIND_HEIGHT: f32 = 40.0;
+pub const FIND_HEIGHT: f32 = 44.0;
 pub const ADDRESS: &str = "address";
 pub const FIND: &str = "find";
 pub const HISTORY_SEARCH: &str = "history-search";
@@ -58,6 +61,28 @@ impl Tab {
     }
 }
 
+/// What the right-click menu offers, from what was under the pointer.
+pub struct ContextMenu {
+    pub at: Point,
+    pub link: String,
+    pub image: String,
+    pub selection: String,
+}
+
+/// The product name: "StonedGem", or "OyNIx Next" when run as `oynix-next`
+/// (which also keeps its own profile folders).
+pub fn product() -> &'static str {
+    static NAME: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
+    NAME.get_or_init(|| {
+        let exe = std::env::args().next().unwrap_or_default();
+        if std::path::Path::new(&exe).file_name().is_some_and(|n| n == "oynix-next") {
+            "OyNIx Next"
+        } else {
+            "StonedGem"
+        }
+    })
+}
+
 pub struct FindBar {
     pub query: String,
     /// Tick at which to search for `query` (searching waits for a pause in
@@ -87,6 +112,9 @@ pub struct Browser {
     /// A field to focus once it's on screen (it may not exist until the
     /// next view, e.g. the find bar right after Ctrl+F).
     focus_next: Option<&'static str>,
+    pub downloads: Downloads,
+    pub context: Option<ContextMenu>,
+    saved_session: Session,
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +139,16 @@ pub enum Message {
     Open(Internal),
     ToggleBookmark,
     OpenUrl(String),
+    RightClicked,
+    CloseContext,
+    OpenInNewTab(String),
+    Copy(String),
+    Download(String),
+    DownloadCancel(u64),
+    DownloadsClear,
+    OpenDownloadsFolder,
+    Zoom(i32),
+    SetRestore(bool),
     FindOpen,
     FindQuery(String),
     FindStep(i32),
@@ -155,15 +193,33 @@ impl Browser {
             palette,
             ticks: 0,
             focus_next: None,
+            downloads: Downloads::default(),
+            context: None,
+            saved_session: Session::default(),
         };
-        let home = b.home_url();
-        b.open_web(&home);
+        match Session::load().filter(|_| b.settings.restore_tabs) {
+            Some(s) => {
+                for url in &s.tabs {
+                    match Internal::from_address(url) {
+                        Some(page) => b.open_internal(page),
+                        None => b.open_web(url),
+                    }
+                }
+                b.select(s.active);
+                b.editing = false;
+                b.saved_session = s;
+            }
+            None => {
+                let home = b.home_url();
+                b.open_web(&home);
+            }
+        }
         (b, iced::widget::operation::focus(ADDRESS))
     }
 
     fn home_url(&self) -> String {
         if self.settings.home.trim().is_empty() {
-            START_PAGE.to_string()
+            start_page(product())
         } else {
             address_to_url(&self.settings.home, &self.settings.search)
         }
@@ -221,7 +277,11 @@ impl Browser {
         }
     }
 
-    fn tab(&self) -> Option<&Tab> {
+    pub fn view_width(&self) -> u32 {
+        self.view.0
+    }
+
+    pub fn tab(&self) -> Option<&Tab> {
         self.tabs.get(self.active)
     }
 
@@ -252,8 +312,8 @@ impl Browser {
 
     fn title(&self) -> String {
         match self.tab() {
-            Some(t) if !t.info.title.is_empty() => format!("{} — StonedGem", t.info.title),
-            _ => "StonedGem".into(),
+            Some(t) if !t.info.title.is_empty() => format!("{} — {}", t.info.title, product()),
+            _ => product().into(),
         }
     }
 
@@ -267,6 +327,34 @@ impl Browser {
         if let Err(e) = self.settings.save() {
             eprintln!("stonedgem: saving settings: {e}");
         }
+    }
+
+    fn session(&self) -> Session {
+        let mut tabs = vec![];
+        let mut active = 0;
+        for (i, t) in self.tabs.iter().enumerate() {
+            if Session::keep(&t.info.url) {
+                if i == self.active {
+                    active = tabs.len();
+                }
+                tabs.push(t.info.url.clone());
+            }
+        }
+        Session { tabs, active }
+    }
+
+    fn save_session(&mut self) {
+        let s = self.session();
+        if s != self.saved_session {
+            s.save();
+            self.saved_session = s;
+        }
+    }
+
+    fn quit(&mut self) -> Task<Message> {
+        self.library.flush();
+        self.save_session();
+        iced::exit()
     }
 
     fn run_find(&mut self, step: i32) {
@@ -311,6 +399,9 @@ impl Browser {
                 if self.ticks.is_multiple_of(300) {
                     self.library.flush();
                 }
+                if self.ticks.is_multiple_of(120) {
+                    self.save_session();
+                }
                 if let Some(p) = self.page() {
                     if p.has_new_frame() {
                         if let Some(f) = p.frame(&self.engine) {
@@ -325,7 +416,8 @@ impl Browser {
                     self.run_find(1);
                 }
                 if let Some(id) = self.focus_next.take() {
-                    return Task::batch([iced::widget::operation::focus(id), iced::widget::operation::select_all(id)]);
+                    // Focus only: the user may already be typing into it.
+                    return Task::batch([iced::widget::operation::focus(id), iced::widget::operation::move_cursor_to_end(id)]);
                 }
             }
             Message::Resized(size) => {
@@ -350,7 +442,7 @@ impl Browser {
             }
             Message::NewTab => {
                 self.menu = false;
-                self.open_web(START_PAGE);
+                self.open_web(&start_page(product()));
                 self.editing = true;
                 self.focus_next = Some(ADDRESS);
             }
@@ -360,8 +452,9 @@ impl Browser {
             }
             Message::Close(i) => match after_close(self.tabs.len(), self.active, i) {
                 None => {
-                    self.library.flush();
-                    return iced::exit();
+                    // Closing the last tab closes the window; it reopens empty.
+                    self.tabs.clear();
+                    return self.quit();
                 }
                 Some(next) => {
                     self.tabs.remove(i);
@@ -384,6 +477,7 @@ impl Browser {
             Message::Clicked => {
                 self.editing = false;
                 self.menu = false;
+                self.context = None;
                 if let Some(page) = self.page() {
                     page.click(self.pointer.x, self.pointer.y);
                 }
@@ -402,9 +496,10 @@ impl Browser {
                 if let Some(s) = shortcut(&key, mods) {
                     return self.run(s);
                 }
-                if key == keyboard::Key::Named(keyboard::key::Named::Escape) && (self.menu || self.find.is_some()) {
-                    if self.menu {
+                if key == keyboard::Key::Named(keyboard::key::Named::Escape) && (self.menu || self.context.is_some() || self.find.is_some()) {
+                    if self.menu || self.context.is_some() {
                         self.menu = false;
+                        self.context = None;
                     } else {
                         return self.update(Message::FindClose);
                     }
@@ -449,6 +544,10 @@ impl Browser {
                 }
                 self.editing = true;
                 self.focus_next = Some(FIND);
+                // Take focus off the address bar now, so keys typed before
+                // the find field exists don't land there; the next tick
+                // focuses the field itself.
+                return iced::widget::operation::focus(FIND);
             }
             Message::FindQuery(q) => {
                 let at = self.ticks + 15;
@@ -508,9 +607,53 @@ impl Browser {
                 self.settings.home = self.home_draft.trim().to_string();
                 self.save_settings();
             }
-            Message::Quit => {
-                self.library.flush();
-                return iced::exit();
+            Message::Quit => return self.quit(),
+            Message::RightClicked => {
+                self.menu = false;
+                let Some(p) = self.page() else { return Task::none() };
+                let z = p.zoom().max(0.1);
+                let (x, y) = (self.pointer.x / z, self.pointer.y / z);
+                let answer = match p.eval(&self.engine, &element_at_script(x, y), Duration::from_secs(2)) {
+                    Ok(stonedgem_engine::Value::String(s)) => s,
+                    _ => String::new(),
+                };
+                let mut parts = answer.splitn(3, '\n').map(str::to_string);
+                self.context = Some(ContextMenu {
+                    at: self.pointer,
+                    link: parts.next().unwrap_or_default(),
+                    image: parts.next().unwrap_or_default(),
+                    selection: parts.next().unwrap_or_default(),
+                });
+            }
+            Message::CloseContext => self.context = None,
+            Message::OpenInNewTab(url) => {
+                self.context = None;
+                let back = self.active;
+                self.open_web(&url);
+                self.select(back);
+            }
+            Message::Copy(t) => {
+                self.context = None;
+                return iced::clipboard::write(t);
+            }
+            Message::Download(url) => {
+                self.context = None;
+                self.downloads.start(&url, &stonedgem_profile::downloads_dir());
+            }
+            Message::DownloadCancel(id) => self.downloads.cancel(id),
+            Message::DownloadsClear => self.downloads.clear_finished(),
+            Message::OpenDownloadsFolder => {
+                let _ = std::process::Command::new("xdg-open").arg(stonedgem_profile::downloads_dir()).spawn();
+            }
+            Message::Zoom(dir) => {
+                self.context = None;
+                if let Some(p) = self.page() {
+                    p.set_zoom(if dir == 0 { 1.0 } else { zoom_step(p.zoom(), dir) });
+                }
+            }
+            Message::SetRestore(on) => {
+                self.settings.restore_tabs = on;
+                self.save_settings();
             }
         }
         Task::none()
@@ -532,6 +675,10 @@ impl Browser {
             Shortcut::Bookmarks => return self.update(Message::Open(Internal::Bookmarks)),
             Shortcut::Settings => return self.update(Message::Open(Internal::Settings)),
             Shortcut::Bookmark => return self.update(Message::ToggleBookmark),
+            Shortcut::Downloads => return self.update(Message::Open(Internal::Downloads)),
+            Shortcut::ZoomIn => return self.update(Message::Zoom(1)),
+            Shortcut::ZoomOut => return self.update(Message::Zoom(-1)),
+            Shortcut::ZoomReset => return self.update(Message::Zoom(0)),
             Shortcut::NextTab if !self.tabs.is_empty() => self.select((self.active + 1) % self.tabs.len()),
             Shortcut::PreviousTab if !self.tabs.is_empty() => self.select((self.active + self.tabs.len() - 1) % self.tabs.len()),
             _ => {}
@@ -556,6 +703,9 @@ impl Browser {
 }
 
 fn main() -> iced::Result {
+    if product() == "OyNIx Next" {
+        stonedgem_profile::set_app("oynix-next");
+    }
     iced::application(Browser::boot, Browser::update, Browser::view)
         .title(Browser::title)
         .subscription(Browser::subscription)

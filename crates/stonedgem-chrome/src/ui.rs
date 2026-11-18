@@ -1,160 +1,301 @@
-//! Drawing the window, all with Iced: tab strip, toolbar, menu, find bar,
-//! the page, and the History, Bookmarks and Settings pages. Colours come
-//! from the Material palette (`Palette`), the same roles OyNIx uses.
+//! Drawing the window, all with Iced. The look follows docs/DESIGN.md:
+//! Material 3 colour roles, shape and type scales, and state layers; a
+//! Liquid-Glass-style layer split (content at the back, controls on a
+//! translucent floating panel over a soft gradient backdrop); neumorphic
+//! raised/inset surfaces used sparingly; and Apple's guidance on target
+//! sizes, spacing, hierarchy and contrast.
 
 use iced::border::Radius;
 use iced::font::Weight;
+use iced::gradient::Linear;
 use iced::widget::{
     button, column, container, image, mouse_area, pick_list, row, scrollable, space, stack, text, text_input, toggler,
 };
-use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding, Shadow, Theme, Vector};
+use iced::{Alignment, Background, Border, Color, Element, Font, Gradient, Length, Padding, Shadow, Theme, Vector};
 
+use stonedgem_chrome::downloads::State as DlState;
 use stonedgem_chrome::palette::Palette;
 use stonedgem_chrome::settings::ACCENTS;
 use stonedgem_chrome::{ago, recordable, Internal};
 
-use crate::{Browser, Content, Message, ADDRESS, FIND, FIND_HEIGHT, HISTORY_SEARCH};
+use crate::{product, Browser, Content, Message, ADDRESS, CHROME_HEIGHT, FIND, FIND_HEIGHT, HISTORY_SEARCH};
 
 const BOLD: Font = Font { weight: Weight::Semibold, ..Font::DEFAULT };
+const HEAVY: Font = Font { weight: Weight::Bold, ..Font::DEFAULT };
+
+// ── Tokens (docs/DESIGN.md) ──────────────────────────────────────────
+
+/// Gap between the window edge and the floating panel.
+pub const PANEL_MARGIN: f32 = 8.0;
+const TAB_ROW: f32 = 40.0;
+const TOOL_ROW: f32 = 48.0;
+const TARGET: f32 = 40.0;
 
 fn radius(r: f32) -> Radius {
     Radius { top_left: r, top_right: r, bottom_right: r, bottom_left: r }
 }
 
-fn fill(c: Color) -> container::Style {
-    container::Style { background: Some(Background::Color(c)), ..Default::default() }
+fn alpha(c: Color, a: f32) -> Color {
+    Color { a, ..c }
 }
 
-fn divider<'a>(c: Color) -> Element<'a, Message> {
-    container(space()).width(Length::Fill).height(1).style(move |_: &Theme| fill(c)).into()
+fn mix(a: Color, b: Color, t: f32) -> Color {
+    Color { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t, a: 1.0 }
 }
 
-/// A round, flat toolbar button.
+/// The thin light edge that makes a surface read as glass or raised.
+fn highlight(p: Palette) -> Color {
+    if p.dark {
+        Color { r: 1.0, g: 1.0, b: 1.0, a: 0.10 }
+    } else {
+        Color { r: 1.0, g: 1.0, b: 1.0, a: 0.70 }
+    }
+}
+
+fn shadow(y: f32, blur: f32, a: f32) -> Shadow {
+    Shadow { color: alpha(Color::BLACK, a), offset: Vector::new(0.0, y), blur_radius: blur }
+}
+
+/// M3 state layer over `base` for hover / press.
+fn state(p: Palette, base: Option<Color>, s: button::Status) -> Option<Background> {
+    let over = match s {
+        button::Status::Hovered => 0.08,
+        button::Status::Pressed => 0.12,
+        _ => 0.0,
+    };
+    match (base, over > 0.0) {
+        (Some(c), true) => Some(Background::Color(mix(c, p.on_surface, over))),
+        (Some(c), false) => Some(Background::Color(c)),
+        (None, true) => Some(Background::Color(alpha(p.on_surface, over))),
+        (None, false) => None,
+    }
+}
+
+/// The page backdrop: something for the glass panel to sit on.
+fn backdrop(p: Palette) -> container::Style {
+    let g = Linear::new(2.35)
+        .add_stop(0.0, mix(p.surface, p.primary, if p.dark { 0.16 } else { 0.12 }))
+        .add_stop(0.55, p.surface)
+        .add_stop(1.0, mix(p.surface, p.tertiary, if p.dark { 0.10 } else { 0.08 }));
+    container::Style { background: Some(Background::Gradient(Gradient::Linear(g))), ..Default::default() }
+}
+
+fn glass(p: Palette, r: f32) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(alpha(p.surface_high, if p.dark { 0.72 } else { 0.74 }))),
+        border: Border { radius: radius(r), width: 1.0, color: highlight(p) },
+        shadow: shadow(10.0, 30.0, if p.dark { 0.30 } else { 0.12 }),
+        ..Default::default()
+    }
+}
+
+fn raised(p: Palette, r: f32) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(p.surface_highest)),
+        border: Border { radius: radius(r), width: 1.0, color: highlight(p) },
+        shadow: shadow(3.0, 10.0, if p.dark { 0.28 } else { 0.10 }),
+        ..Default::default()
+    }
+}
+
+fn card_style(p: Palette) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(alpha(p.surface_container, if p.dark { 0.82 } else { 0.86 }))),
+        border: Border { radius: radius(24.0), width: 1.0, color: highlight(p) },
+        shadow: shadow(6.0, 22.0, if p.dark { 0.25 } else { 0.08 }),
+        ..Default::default()
+    }
+}
+
+fn popup_style(p: Palette) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(alpha(p.surface_container, 0.96))),
+        border: Border { radius: radius(20.0), width: 1.0, color: highlight(p) },
+        shadow: shadow(16.0, 40.0, if p.dark { 0.45 } else { 0.18 }),
+        ..Default::default()
+    }
+}
+
+// ── Building blocks ──────────────────────────────────────────────────
+
+fn hairline<'a>(p: Palette) -> Element<'a, Message> {
+    container(space())
+        .width(Length::Fill)
+        .height(1)
+        .style(move |_: &Theme| container::Style { background: Some(Background::Color(alpha(p.outline_variant, 0.6))), ..Default::default() })
+        .into()
+}
+
+/// A round toolbar button with a ≥ 40 px target.
 fn icon<'a>(p: Palette, glyph: &'a str, msg: Option<Message>) -> Element<'a, Message> {
-    button(text(glyph).size(17).align_x(Alignment::Center).width(Length::Fill))
-        .width(34)
-        .height(34)
-        .padding(Padding::from([6, 0]))
+    button(text(glyph).size(18).align_x(Alignment::Center).align_y(Alignment::Center).width(Length::Fill).height(Length::Fill))
+        .width(TARGET)
+        .height(TARGET)
+        .padding(0)
         .on_press_maybe(msg)
         .style(move |_: &Theme, s: button::Status| {
-            let bg = match s {
-                button::Status::Hovered => Some(Background::Color(p.surface_highest)),
-                button::Status::Pressed => Some(Background::Color(p.secondary_container)),
-                _ => None,
-            };
-            let text_color = if s == button::Status::Disabled { p.outline } else { p.on_surface_variant };
-            button::Style { background: bg, text_color, border: Border { radius: radius(17.0), ..Default::default() }, ..Default::default() }
+            let text_color = if s == button::Status::Disabled { alpha(p.on_surface_variant, 0.38) } else { p.on_surface_variant };
+            button::Style { background: state(p, None, s), text_color, border: Border { radius: radius(TARGET / 2.0), ..Default::default() }, ..Default::default() }
         })
         .into()
 }
 
-/// A flat text button that highlights on hover (menus, lists).
-fn flat(p: Palette, active: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+/// A list/menu row: transparent until hovered; `selected` uses the tonal container.
+fn flat(p: Palette, selected: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
     move |_: &Theme, s: button::Status| {
-        let bg = match (active, s) {
-            (true, _) => Some(Background::Color(p.secondary_container)),
-            (_, button::Status::Hovered) => Some(Background::Color(p.surface_highest)),
-            (_, button::Status::Pressed) => Some(Background::Color(p.secondary_container)),
-            _ => None,
+        let base = selected.then_some(p.secondary_container);
+        let text_color = if s == button::Status::Disabled {
+            alpha(p.on_surface, 0.38)
+        } else if selected {
+            p.on_secondary_container
+        } else {
+            p.on_surface
         };
-        let text_color = if active { p.on_secondary_container } else { p.on_surface };
-        button::Style { background: bg, text_color, border: Border { radius: radius(10.0), ..Default::default() }, ..Default::default() }
+        button::Style { background: state(p, base, s), text_color, border: Border { radius: radius(12.0), ..Default::default() }, ..Default::default() }
     }
 }
 
+/// M3 filled button (the one primary action on a page).
 fn filled(p: Palette) -> impl Fn(&Theme, button::Status) -> button::Style {
     move |_: &Theme, s: button::Status| {
-        let bg = if s == button::Status::Hovered { Color { a: 0.88, ..p.primary } } else { p.primary };
-        button::Style { background: Some(Background::Color(bg)), text_color: p.on_primary, border: Border { radius: radius(18.0), ..Default::default() }, ..Default::default() }
+        let bg = match s {
+            button::Status::Hovered => mix(p.primary, p.on_primary, 0.08),
+            button::Status::Pressed => mix(p.primary, p.on_primary, 0.12),
+            _ => p.primary,
+        };
+        button::Style {
+            background: Some(Background::Color(bg)),
+            text_color: p.on_primary,
+            border: Border { radius: radius(20.0), ..Default::default() },
+            shadow: if s == button::Status::Hovered { shadow(2.0, 6.0, 0.2) } else { Shadow::default() },
+            ..Default::default()
+        }
     }
 }
 
-fn field(p: Palette, bg: Color) -> impl Fn(&Theme, text_input::Status) -> text_input::Style {
+/// M3 tonal button (secondary actions).
+fn tonal(p: Palette) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_: &Theme, s: button::Status| button::Style {
+        background: state(p, Some(p.secondary_container), s),
+        text_color: p.on_secondary_container,
+        border: Border { radius: radius(20.0), ..Default::default() },
+        ..Default::default()
+    }
+}
+
+/// A text field: softly inset; a 2 px primary ring when focused.
+fn field(p: Palette, inset: bool) -> impl Fn(&Theme, text_input::Status) -> text_input::Style {
     move |_: &Theme, s: text_input::Status| {
         let focused = matches!(s, text_input::Status::Focused { .. });
+        let (bg, edge) = if inset {
+            (alpha(p.surface_lowest, if p.dark { 0.55 } else { 0.65 }), alpha(p.outline_variant, 0.7))
+        } else {
+            (Color::TRANSPARENT, Color::TRANSPARENT)
+        };
         text_input::Style {
             background: Background::Color(bg),
-            border: Border { radius: radius(18.0), width: if focused { 2.0 } else { 0.0 }, color: p.primary },
+            border: Border { radius: radius(20.0), width: if focused { 2.0 } else if inset { 1.0 } else { 0.0 }, color: if focused { p.primary } else { edge } },
             icon: p.on_surface_variant,
             placeholder: p.on_surface_variant,
             value: p.on_surface,
-            selection: Color { a: 0.35, ..p.primary },
+            selection: alpha(p.primary, 0.35),
         }
     }
 }
 
 fn card<'a>(p: Palette, content: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
-    container(content)
-        .padding(20)
-        .width(Length::Fill)
-        .style(move |_: &Theme| container::Style {
-            background: Some(Background::Color(p.surface_container)),
+    container(content).padding(24).width(Length::Fill).style(move |_: &Theme| card_style(p)).into()
+}
+
+fn chip<'a>(p: Palette, label: String, msg: Message, live: bool) -> Element<'a, Message> {
+    button(text(label).size(12).font(BOLD))
+        .on_press(msg)
+        .padding(Padding::from([6, 12]))
+        .style(move |_: &Theme, s: button::Status| button::Style {
+            background: state(p, Some(if live { p.primary } else { p.secondary_container }), s),
+            text_color: if live { p.on_primary } else { p.on_secondary_container },
             border: Border { radius: radius(16.0), ..Default::default() },
             ..Default::default()
         })
         .into()
 }
 
+// ── Window ───────────────────────────────────────────────────────────
+
 pub fn view(b: &Browser) -> Element<'_, Message> {
     let p = b.palette;
-    let mut main = column![tab_strip(b), toolbar(b), divider(p.outline_variant)];
+    let mut panel = column![tab_strip(b), toolbar(b)];
     if b.find.is_some() {
-        main = main.push(find_bar(b)).push(divider(p.outline_variant));
+        panel = panel.push(find_bar(b));
     }
-    main = main.push(content(b));
-    let base = container(main).style(move |_: &Theme| fill(p.surface));
+    let panel = container(container(panel).padding(Padding { top: 0.0, right: 8.0, bottom: 0.0, left: 8.0 }).style(move |_: &Theme| glass(p, 22.0)))
+        .padding(PANEL_MARGIN);
 
-    if !b.menu {
-        return base.into();
+    let main = column![panel, content(b)];
+    let base = container(main).width(Length::Fill).height(Length::Fill).style(move |_: &Theme| backdrop(p));
+
+    let chrome = CHROME_HEIGHT + if b.find.is_some() { FIND_HEIGHT } else { 0.0 };
+    if b.menu {
+        return stack![
+            base,
+            mouse_area(container(space()).width(Length::Fill).height(Length::Fill)).on_press(Message::CloseMenu),
+            container(menu(b)).width(Length::Fill).align_x(Alignment::End).padding(Padding { top: chrome - 10.0, right: 16.0, bottom: 0.0, left: 0.0 }),
+        ]
+        .into();
     }
-    stack![
-        base,
-        mouse_area(container(space()).width(Length::Fill).height(Length::Fill)).on_press(Message::CloseMenu),
-        container(menu(p)).width(Length::Fill).align_x(Alignment::End).padding(Padding { top: 78.0, right: 10.0, bottom: 0.0, left: 0.0 }),
-    ]
-    .into()
+    if let Some(c) = &b.context {
+        let top = chrome + c.at.y;
+        let left = c.at.x.min(b.view_width() as f32 - 270.0).max(8.0);
+        return stack![
+            base,
+            mouse_area(container(space()).width(Length::Fill).height(Length::Fill))
+                .on_press(Message::CloseContext)
+                .on_right_press(Message::CloseContext),
+            container(context_menu(b, c)).padding(Padding { top, right: 0.0, bottom: 0.0, left }),
+        ]
+        .into();
+    }
+    base.into()
 }
 
 fn tab_strip(b: &Browser) -> Element<'_, Message> {
     let p = b.palette;
-    let mut strip = row![].spacing(2).padding(Padding { top: 6.0, right: 8.0, bottom: 0.0, left: 8.0 }).align_y(Alignment::End);
+    let mut strip = row![].spacing(6).align_y(Alignment::Center);
     for (i, t) in b.tabs.iter().enumerate() {
         let active = i == b.active;
-        let dot = text(if t.info.loading { "●" } else { "" }).size(9).color(p.primary);
+        let dot = text(if t.info.loading { "●" } else { "" }).size(8).color(p.primary);
         let label = text(t.info.label())
             .size(13)
+            .font(if active { BOLD } else { Font::DEFAULT })
             .wrapping(iced::widget::text::Wrapping::None)
             .color(if active { p.on_surface } else { p.on_surface_variant });
-        let close = button(text("✕").size(11).align_x(Alignment::Center).width(Length::Fill))
-            .width(20)
-            .height(20)
-            .padding(Padding::from([3, 0]))
+        let close = button(text("✕").size(10).align_x(Alignment::Center).align_y(Alignment::Center).width(Length::Fill).height(Length::Fill))
+            .width(22)
+            .height(22)
+            .padding(0)
             .on_press(Message::Close(i))
             .style(move |_: &Theme, s: button::Status| button::Style {
-                background: (s == button::Status::Hovered).then_some(Background::Color(p.surface_highest)),
+                background: state(p, None, s),
                 text_color: p.on_surface_variant,
-                border: Border { radius: radius(10.0), ..Default::default() },
+                border: Border { radius: radius(11.0), ..Default::default() },
                 ..Default::default()
             });
         let body = button(row![dot, label].spacing(6).align_y(Alignment::Center))
             .on_press(Message::Select(i))
-            .padding(Padding::from([5, 4]))
+            .padding(Padding::from([6, 2]))
             .width(Length::Fill)
             .style(move |_: &Theme, _s| button::Style { background: None, text_color: p.on_surface, ..Default::default() });
-        let tab = container(row![body, close].spacing(2).align_y(Alignment::Center))
-            .width(200)
-            .height(30)
-            .padding(Padding { top: 0.0, right: 6.0, bottom: 0.0, left: 8.0 })
-            .align_y(Alignment::Center)
-            .style(move |_: &Theme| container::Style {
-                background: active.then_some(Background::Color(p.surface_high)),
-                border: Border { radius: Radius { top_left: 10.0, top_right: 10.0, bottom_right: 0.0, bottom_left: 0.0 }, ..Default::default() },
-                ..Default::default()
-            });
-        strip = strip.push(tab);
+        let pill = container(row![body, close].spacing(2).align_y(Alignment::Center))
+            .width(Length::Fixed(196.0))
+            .height(32)
+            .padding(Padding { top: 0.0, right: 5.0, bottom: 0.0, left: 12.0 })
+            .align_y(Alignment::Center);
+        // The selected tab is raised (neumorphic); the others sit flat on the glass.
+        let pill = if active { pill.style(move |_: &Theme| raised(p, 16.0)) } else { pill };
+        strip = strip.push(pill);
     }
-    strip = strip.push(container(icon(p, "+", Some(Message::NewTab))).padding(Padding { top: 0.0, right: 0.0, bottom: 2.0, left: 4.0 }));
-    container(strip).width(Length::Fill).height(36).style(move |_: &Theme| fill(p.surface_lowest)).into()
+    strip = strip.push(icon(p, "+", Some(Message::NewTab)));
+    container(strip).width(Length::Fill).height(TAB_ROW).align_y(Alignment::End).into()
 }
 
 fn toolbar(b: &Browser) -> Element<'_, Message> {
@@ -167,42 +308,46 @@ fn toolbar(b: &Browser) -> Element<'_, Message> {
     let starred = web && b.library.is_bookmarked(url);
     let blocked = page.map(|x| x.blocked().len()).unwrap_or(0);
 
-    let mut pill = row![].spacing(4).align_y(Alignment::Center).padding(Padding { top: 0.0, right: 4.0, bottom: 0.0, left: 12.0 });
+    let mut pill = row![].spacing(6).align_y(Alignment::Center).padding(Padding { top: 0.0, right: 2.0, bottom: 0.0, left: 14.0 });
     if url.starts_with("http://") {
-        pill = pill.push(text("Not secure").size(12).color(p.error));
+        pill = pill.push(text("Not secure").size(12).font(BOLD).color(p.error));
     } else if b.tab().and_then(|t| t.internal()).is_some() {
-        pill = pill.push(text("StonedGem").size(12).font(BOLD).color(p.primary));
+        pill = pill.push(text(product()).size(12).font(BOLD).color(p.primary));
     }
     pill = pill.push(
         text_input("Search or type an address", &b.address)
             .id(ADDRESS)
             .on_input(Message::Address)
             .on_submit(Message::Go)
-            .padding(Padding::from([7, 6]))
+            .padding(Padding::from([8, 4]))
             .size(14)
-            .style(field(p, Color::TRANSPARENT)),
+            .style(field(p, false)),
     );
     if web {
         pill = pill.push(icon(p, if starred { "★" } else { "☆" }, Some(Message::ToggleBookmark)));
     }
-    let pill = container(pill).width(Length::Fill).height(36).align_y(Alignment::Center).style(move |_: &Theme| container::Style {
-        background: Some(Background::Color(p.surface_highest)),
-        border: Border { radius: radius(18.0), ..Default::default() },
+    // The address capsule is softly inset into the glass.
+    let pill = container(pill).width(Length::Fill).height(TARGET).align_y(Alignment::Center).style(move |_: &Theme| container::Style {
+        background: Some(Background::Color(alpha(p.surface_lowest, if p.dark { 0.55 } else { 0.65 }))),
+        border: Border { radius: radius(TARGET / 2.0), width: 1.0, color: alpha(p.outline_variant, 0.7) },
         ..Default::default()
     });
 
-    let shield: Element<'_, Message> = if blocked > 0 {
-        container(text(format!("{blocked} blocked")).size(12).color(p.on_secondary_container))
-            .padding(Padding::from([4, 10]))
-            .style(move |_: &Theme| container::Style {
-                background: Some(Background::Color(p.secondary_container)),
-                border: Border { radius: radius(12.0), ..Default::default() },
-                ..Default::default()
-            })
-            .into()
-    } else {
-        space().width(0).into()
-    };
+    let mut right = row![].spacing(6).align_y(Alignment::Center);
+    let zoom = page.map(|x| x.zoom()).unwrap_or(1.0);
+    if (zoom - 1.0).abs() > 0.01 {
+        right = right.push(chip(p, format!("{:.0}%", zoom * 100.0), Message::Zoom(0), false));
+    }
+    if blocked > 0 {
+        right = right.push(chip(p, format!("{blocked} blocked"), Message::Open(Internal::Settings), false));
+    }
+    let running = b.downloads.running();
+    if running > 0 {
+        right = right.push(chip(p, format!("⇩ {running}"), Message::Open(Internal::Downloads), true));
+    } else if !b.downloads.snapshot().is_empty() {
+        right = right.push(icon(p, "⇩", Some(Message::Open(Internal::Downloads))));
+    }
+    right = right.push(icon(p, "⋮", Some(Message::ToggleMenu)));
 
     let bar = row![
         icon(p, "←", can_back.then_some(Message::Back)),
@@ -210,75 +355,133 @@ fn toolbar(b: &Browser) -> Element<'_, Message> {
         icon(p, "↻", page.is_some().then_some(Message::Reload)),
         icon(p, "⌂", Some(Message::Home)),
         pill,
-        shield,
-        icon(p, "⋮", Some(Message::ToggleMenu)),
+        right,
     ]
     .spacing(4)
-    .padding(Padding::from([6, 8]))
     .align_y(Alignment::Center);
-    container(bar).width(Length::Fill).height(47).style(move |_: &Theme| fill(p.surface_high)).into()
-}
-
-fn menu<'a>(p: Palette) -> Element<'a, Message> {
-    let item = |label: &'a str, keys: &'a str, msg: Message| -> Element<'a, Message> {
-        button(row![text(label).size(14), space().width(Length::Fill), text(keys).size(12).color(p.on_surface_variant)].align_y(Alignment::Center))
-            .on_press(msg)
-            .width(Length::Fill)
-            .padding(Padding::from([8, 12]))
-            .style(flat(p, false))
-            .into()
-    };
-    let list = column![
-        item("New tab", "Ctrl+T", Message::NewTab),
-        item("Find in page", "Ctrl+F", Message::FindOpen),
-        divider(p.outline_variant),
-        item("History", "Ctrl+H", Message::Open(Internal::History)),
-        item("Bookmarks", "Ctrl+Shift+O", Message::Open(Internal::Bookmarks)),
-        item("Settings", "Ctrl+,", Message::Open(Internal::Settings)),
-        divider(p.outline_variant),
-        item("Quit", "", Message::Quit),
-    ]
-    .spacing(2)
-    .width(260);
-    container(list)
-        .padding(6)
-        .style(move |_: &Theme| container::Style {
-            background: Some(Background::Color(p.surface_container)),
-            border: Border { radius: radius(14.0), width: 1.0, color: p.outline_variant },
-            shadow: Shadow { color: Color { a: 0.45, ..Color::BLACK }, offset: Vector::new(0.0, 6.0), blur_radius: 18.0 },
-            ..Default::default()
-        })
-        .into()
+    container(bar).width(Length::Fill).height(TOOL_ROW).align_y(Alignment::Center).into()
 }
 
 fn find_bar(b: &Browser) -> Element<'_, Message> {
     let p = b.palette;
     let Some(f) = &b.find else { return space().into() };
     let count = match f.result {
-        Some((_, 0)) if !f.query.is_empty() => text("No matches").size(12).color(p.error),
-        Some((i, n)) if n > 0 => text(format!("{i} of {n}")).size(12).color(p.on_surface_variant),
-        _ => text("").size(12),
+        Some((_, 0)) if !f.query.is_empty() => text("No matches").size(13).color(p.error),
+        Some((i, n)) if n > 0 => text(format!("{i} of {n}")).size(13).color(p.on_surface_variant),
+        _ => text("").size(13),
     };
     let bar = row![
         text_input("Find in page", &f.query)
             .id(FIND)
             .on_input(Message::FindQuery)
             .on_submit(Message::FindStep(1))
-            .padding(Padding::from([5, 12]))
-            .size(13)
-            .width(280)
-            .style(field(p, p.surface_highest)),
+            .padding(Padding::from([7, 16]))
+            .size(14)
+            .width(320)
+            .style(field(p, true)),
         count,
         icon(p, "↑", Some(Message::FindStep(-1))),
         icon(p, "↓", Some(Message::FindStep(1))),
         space().width(Length::Fill),
         icon(p, "✕", Some(Message::FindClose)),
     ]
-    .spacing(6)
-    .padding(Padding::from([2, 10]))
+    .spacing(8)
     .align_y(Alignment::Center);
-    container(bar).width(Length::Fill).height(FIND_HEIGHT - 1.0).align_y(Alignment::Center).style(move |_: &Theme| fill(p.surface_container)).into()
+    column![hairline(p), container(bar).width(Length::Fill).height(FIND_HEIGHT - 1.0).align_y(Alignment::Center)].into()
 }
+
+// ── Menus ────────────────────────────────────────────────────────────
+
+fn popup<'a>(p: Palette, content: impl Into<Element<'a, Message>>, width: f32) -> Element<'a, Message> {
+    container(content).padding(8).width(width).style(move |_: &Theme| popup_style(p)).into()
+}
+
+fn menu_item<'a>(p: Palette, label: &'a str, keys: &'a str, msg: Option<Message>) -> Element<'a, Message> {
+    let enabled = msg.is_some();
+    button(
+        row![
+            text(label).size(14).color(if enabled { p.on_surface } else { alpha(p.on_surface, 0.38) }),
+            space().width(Length::Fill),
+            text(keys).size(12).color(p.on_surface_variant)
+        ]
+        .align_y(Alignment::Center),
+    )
+    .on_press_maybe(msg)
+    .width(Length::Fill)
+    .height(40)
+    .padding(Padding::from([0, 14]))
+    .style(flat(p, false))
+    .into()
+}
+
+fn menu_divider<'a>(p: Palette) -> Element<'a, Message> {
+    container(hairline(p)).padding(Padding::from([4, 8])).into()
+}
+
+fn menu(b: &Browser) -> Element<'_, Message> {
+    let p = b.palette;
+    let page = b.tab().and_then(|t| t.page());
+    let zoom = page.map(|x| x.zoom()).unwrap_or(1.0);
+    let zoom_row = row![
+        text("Zoom").size(14).color(p.on_surface),
+        space().width(Length::Fill),
+        icon(p, "−", page.map(|_| Message::Zoom(-1))),
+        button(text(format!("{:.0}%", zoom * 100.0)).size(13).align_x(Alignment::Center).width(Length::Fill))
+            .width(60)
+            .on_press_maybe(page.map(|_| Message::Zoom(0)))
+            .style(flat(p, false)),
+        icon(p, "+", page.map(|_| Message::Zoom(1))),
+    ]
+    .align_y(Alignment::Center)
+    .padding(Padding { top: 0.0, right: 0.0, bottom: 0.0, left: 14.0 });
+    let list = column![
+        menu_item(p, "New tab", "Ctrl+T", Some(Message::NewTab)),
+        menu_item(p, "Find in page", "Ctrl+F", page.map(|_| Message::FindOpen)),
+        zoom_row,
+        menu_divider(p),
+        menu_item(p, "History", "Ctrl+H", Some(Message::Open(Internal::History))),
+        menu_item(p, "Bookmarks", "Ctrl+Shift+O", Some(Message::Open(Internal::Bookmarks))),
+        menu_item(p, "Downloads", "Ctrl+J", Some(Message::Open(Internal::Downloads))),
+        menu_item(p, "Settings", "Ctrl+,", Some(Message::Open(Internal::Settings))),
+        menu_divider(p),
+        menu_item(p, "Quit", "", Some(Message::Quit)),
+    ]
+    .spacing(2);
+    popup(p, list, 288.0)
+}
+
+fn context_menu<'a>(b: &'a Browser, c: &'a crate::ContextMenu) -> Element<'a, Message> {
+    let p = b.palette;
+    let page = b.tab().and_then(|t| t.page());
+    let mut list = column![].spacing(2);
+    if !c.link.is_empty() {
+        list = list
+            .push(menu_item(p, "Open link in new tab", "", Some(Message::OpenInNewTab(c.link.clone()))))
+            .push(menu_item(p, "Copy link address", "", Some(Message::Copy(c.link.clone()))))
+            .push(menu_item(p, "Save link as download", "", Some(Message::Download(c.link.clone()))))
+            .push(menu_divider(p));
+    }
+    if !c.image.is_empty() {
+        list = list
+            .push(menu_item(p, "Open image in new tab", "", Some(Message::OpenInNewTab(c.image.clone()))))
+            .push(menu_item(p, "Copy image address", "", Some(Message::Copy(c.image.clone()))))
+            .push(menu_item(p, "Save image", "", Some(Message::Download(c.image.clone()))))
+            .push(menu_divider(p));
+    }
+    if !c.selection.trim().is_empty() {
+        list = list.push(menu_item(p, "Copy", "Ctrl+C", Some(Message::Copy(c.selection.clone())))).push(menu_divider(p));
+    }
+    list = list
+        .push(menu_item(p, "Back", "Alt+←", page.filter(|x| x.can_go_back()).map(|_| Message::Back)))
+        .push(menu_item(p, "Forward", "Alt+→", page.filter(|x| x.can_go_forward()).map(|_| Message::Forward)))
+        .push(menu_item(p, "Reload", "Ctrl+R", Some(Message::Reload)))
+        .push(menu_divider(p))
+        .push(menu_item(p, "Bookmark this page", "Ctrl+D", Some(Message::ToggleBookmark)))
+        .push(menu_item(p, "Find in page", "Ctrl+F", Some(Message::FindOpen)));
+    popup(p, list, 262.0)
+}
+
+// ── Content ──────────────────────────────────────────────────────────
 
 fn content(b: &Browser) -> Element<'_, Message> {
     let Some(t) = b.tab() else { return space().into() };
@@ -291,6 +494,7 @@ fn content(b: &Browser) -> Element<'_, Message> {
             mouse_area(container(page).width(Length::Fill).height(Length::Fill).align_top(Length::Fill))
                 .on_move(Message::PointerMoved)
                 .on_press(Message::Clicked)
+                .on_right_press(Message::RightClicked)
                 .on_scroll(Message::Scrolled)
                 .into()
         }
@@ -298,9 +502,10 @@ fn content(b: &Browser) -> Element<'_, Message> {
             let body = match page {
                 Internal::History => history(b),
                 Internal::Bookmarks => bookmarks(b),
+                Internal::Downloads => downloads(b),
                 Internal::Settings => settings(b),
             };
-            scrollable(container(container(body).max_width(780)).width(Length::Fill).align_x(Alignment::Center).padding(Padding::from([28, 24])))
+            scrollable(container(container(body).max_width(760)).width(Length::Fill).align_x(Alignment::Center).padding(Padding::from([24, 24])))
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .into()
@@ -308,39 +513,60 @@ fn content(b: &Browser) -> Element<'_, Message> {
     }
 }
 
-fn heading<'a>(p: Palette, title: &'a str) -> iced::widget::Text<'a> {
-    text(title).size(28).font(BOLD).color(p.on_surface)
+fn heading<'a>(p: Palette, title: &'a str, subtitle: String) -> Element<'a, Message> {
+    column![text(title).size(34).font(HEAVY).color(p.on_surface), text(subtitle).size(14).color(p.on_surface_variant)].spacing(4).into()
 }
 
+fn page_header<'a>(p: Palette, title: &'a str, subtitle: String, actions: Element<'a, Message>) -> Element<'a, Message> {
+    row![heading(p, title, subtitle), space().width(Length::Fill), actions].align_y(Alignment::End).into()
+}
+
+/// A row in a list card: a 44 px+ target that opens `url`, with trailing items.
 fn link_row<'a>(p: Palette, title: &str, url: &str, side: Element<'a, Message>, remove: Message) -> Element<'a, Message> {
     let title = if title.trim().is_empty() { url.to_string() } else { title.to_string() };
-    let main = button(column![text(title).size(14).color(p.on_surface), text(stonedgem_url::display(url, true)).size(12).color(p.on_surface_variant)].spacing(2))
-        .on_press(Message::OpenUrl(url.to_string()))
-        .width(Length::Fill)
-        .padding(Padding::from([8, 12]))
-        .style(flat(p, false));
+    let main = button(
+        column![
+            text(title).size(15).color(p.on_surface).wrapping(iced::widget::text::Wrapping::None),
+            text(stonedgem_url::display(url, true)).size(12).color(p.on_surface_variant).wrapping(iced::widget::text::Wrapping::None)
+        ]
+        .spacing(3),
+    )
+    .on_press(Message::OpenUrl(url.to_string()))
+    .width(Length::Fill)
+    .padding(Padding::from([10, 14]))
+    .style(flat(p, false));
     row![main, side, icon(p, "✕", Some(remove))].spacing(8).align_y(Alignment::Center).into()
+}
+
+fn empty<'a>(p: Palette, line: &'a str) -> Element<'a, Message> {
+    card(p, container(text(line).size(15).color(p.on_surface_variant)).width(Length::Fill).align_x(Alignment::Center).padding(24))
 }
 
 fn history(b: &Browser) -> Element<'_, Message> {
     let p = b.palette;
     let now = stonedgem_library::now();
     let entries = b.library.search_history(&b.history_query, 400);
-    let mut list = column![].spacing(2);
-    for h in &entries {
-        list = list.push(link_row(p, &h.title, &h.url, text(ago(h.last_visit, now)).size(12).color(p.on_surface_variant).into(), Message::HistoryRemove(h.url.clone())));
-    }
-    if entries.is_empty() {
-        list = list.push(text(if b.history_query.is_empty() { "Pages you visit will show up here." } else { "Nothing matches." }).size(14).color(p.on_surface_variant));
-    }
-    column![
-        row![heading(p, "History"), space().width(Length::Fill), button(text("Clear history").size(13)).on_press(Message::HistoryClear).padding(Padding::from([8, 16])).style(filled(p))]
-            .align_y(Alignment::Center),
-        text_input("Search history", &b.history_query).id(HISTORY_SEARCH).on_input(Message::HistoryQuery).padding(Padding::from([9, 16])).style(field(p, p.surface_highest)),
-        card(p, list),
+    let total = b.library.history.len();
+    let mut col = column![
+        page_header(
+            p,
+            "History",
+            format!("{total} page{} visited", if total == 1 { "" } else { "s" }),
+            button(text("Clear history").size(14)).on_press(Message::HistoryClear).padding(Padding::from([10, 20])).style(tonal(p)).into()
+        ),
+        text_input("Search history", &b.history_query).id(HISTORY_SEARCH).on_input(Message::HistoryQuery).padding(Padding::from([11, 20])).size(15).style(field(p, true)),
     ]
-    .spacing(18)
-    .into()
+    .spacing(20);
+    if entries.is_empty() {
+        col = col.push(empty(p, if b.history_query.is_empty() { "Pages you visit will show up here." } else { "Nothing matches." }));
+    } else {
+        let mut list = column![].spacing(2);
+        for h in &entries {
+            list = list.push(link_row(p, &h.title, &h.url, text(ago(h.last_visit, now)).size(12).color(p.on_surface_variant).into(), Message::HistoryRemove(h.url.clone())));
+        }
+        col = col.push(container(list).padding(8).width(Length::Fill).style(move |_: &Theme| card_style(p)));
+    }
+    col.into()
 }
 
 fn bookmarks(b: &Browser) -> Element<'_, Message> {
@@ -348,9 +574,10 @@ fn bookmarks(b: &Browser) -> Element<'_, Message> {
     let mut folders: Vec<&str> = b.library.bookmarks.iter().map(|x| x.folder.as_str()).collect();
     folders.sort();
     folders.dedup();
-    let mut col = column![heading(p, "Bookmarks")].spacing(18);
+    let n = b.library.bookmarks.len();
+    let mut col = column![heading(p, "Bookmarks", format!("{n} saved"))].spacing(20);
     if b.library.bookmarks.is_empty() {
-        col = col.push(text("Press ☆ in the address bar (or Ctrl+D) to bookmark a page.").size(14).color(p.on_surface_variant));
+        col = col.push(empty(p, "Press ☆ in the address bar (or Ctrl+D) to bookmark a page."));
     }
     for folder in folders {
         let name = match folder {
@@ -358,88 +585,136 @@ fn bookmarks(b: &Browser) -> Element<'_, Message> {
             "favorites" => "Favourites",
             f => f,
         };
-        let mut list = column![text(name).size(13).font(BOLD).color(p.primary)].spacing(2);
+        let mut list = column![container(text(name).size(13).font(BOLD).color(p.primary)).padding(Padding::from([8, 14]))].spacing(2);
         for bm in b.library.bookmarks.iter().filter(|x| x.folder == folder) {
             list = list.push(link_row(p, &bm.title, &bm.url, space().width(0).into(), Message::BookmarkRemove(bm.url.clone())));
         }
-        col = col.push(card(p, list));
+        col = col.push(container(list).padding(8).width(Length::Fill).style(move |_: &Theme| card_style(p)));
     }
     col.into()
 }
 
+fn downloads(b: &Browser) -> Element<'_, Message> {
+    let p = b.palette;
+    let list = b.downloads.snapshot();
+    let running = b.downloads.running();
+    let actions = row![
+        button(text("Open folder").size(14)).on_press(Message::OpenDownloadsFolder).padding(Padding::from([10, 20])).style(tonal(p)),
+        button(text("Clear finished").size(14)).on_press(Message::DownloadsClear).padding(Padding::from([10, 20])).style(tonal(p)),
+    ]
+    .spacing(8);
+    let sub = if running > 0 { format!("{running} in progress") } else { format!("Saved to {}", stonedgem_profile::downloads_dir().display()) };
+    let mut col = column![page_header(p, "Downloads", sub, actions.into())].spacing(20);
+    if list.is_empty() {
+        col = col.push(empty(p, "Right-click a link or an image and choose Save to download it."));
+        return col.into();
+    }
+    let mut rows = column![].spacing(4);
+    for d in list.iter().rev() {
+        let name = d.file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| stonedgem_chrome::downloads::file_name(&d.url, None));
+        let (status, color) = match &d.state {
+            DlState::Running => (format!("Downloading · {}", d.progress()), p.primary),
+            DlState::Done => (format!("Done · {}", d.progress()), p.on_surface_variant),
+            DlState::Failed(e) => (format!("Failed — {e}"), p.error),
+            DlState::Cancelled => ("Cancelled".into(), p.on_surface_variant),
+        };
+        let action: Element<'_, Message> = if d.state == DlState::Running { icon(p, "✕", Some(Message::DownloadCancel(d.id))) } else { space().width(0).into() };
+        rows = rows.push(
+            container(
+                row![
+                    column![
+                        text(name).size(15).color(p.on_surface),
+                        text(stonedgem_url::display(&d.url, true)).size(12).color(p.on_surface_variant).wrapping(iced::widget::text::Wrapping::None),
+                        text(status).size(12).font(BOLD).color(color)
+                    ]
+                    .spacing(3)
+                    .width(Length::Fill),
+                    action
+                ]
+                .align_y(Alignment::Center),
+            )
+            .padding(Padding::from([10, 14])),
+        );
+    }
+    col.push(container(rows).padding(8).width(Length::Fill).style(move |_: &Theme| card_style(p))).into()
+}
+
 fn section<'a>(p: Palette, title: &'a str, body: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
-    card(p, column![text(title).size(16).font(BOLD).color(p.on_surface), body.into()].spacing(14))
+    card(p, column![text(title).size(20).font(BOLD).color(p.on_surface), body.into()].spacing(18))
+}
+
+/// A settings row: label on the left, control on the right, 44 px tall.
+fn setting<'a>(p: Palette, label: &'a str, control: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
+    row![text(label).size(15).color(p.on_surface).width(Length::Fill), control.into()].align_y(Alignment::Center).height(44).into()
+}
+
+fn switch<'a>(on: bool, f: fn(bool) -> Message) -> Element<'a, Message> {
+    toggler(on).on_toggle(f).size(24).into()
 }
 
 fn settings(b: &Browser) -> Element<'_, Message> {
     let p = b.palette;
     let s = &b.settings;
 
-    let mut swatches = row![].spacing(10);
-    for (name, hex) in ACCENTS {
-        let c = stonedgem_chrome::palette::Palette::new(hex, s.dark).primary;
+    let mut swatches = row![].spacing(10).align_y(Alignment::Center);
+    for (_, hex) in ACCENTS {
+        let c = Palette::new(hex, s.dark).primary;
         let chosen = s.accent.eq_ignore_ascii_case(hex);
         swatches = swatches.push(
-            button(space().width(0))
-                .width(30)
-                .height(30)
+            button(text(if chosen { "✓" } else { "" }).size(14).align_x(Alignment::Center).align_y(Alignment::Center).width(Length::Fill).height(Length::Fill))
+                .width(34)
+                .height(34)
+                .padding(0)
                 .on_press(Message::SetAccent(hex.to_string()))
-                .style(move |_: &Theme, _s| button::Style {
-                    background: Some(Background::Color(c)),
-                    border: Border { radius: radius(15.0), width: if chosen { 3.0 } else { 0.0 }, color: p.on_surface },
+                .style(move |_: &Theme, st: button::Status| button::Style {
+                    background: Some(Background::Color(if st == button::Status::Hovered { mix(c, Color::WHITE, 0.12) } else { c })),
+                    text_color: Palette::new(hex, p.dark).on_primary,
+                    border: Border { radius: radius(17.0), width: if chosen { 2.0 } else { 1.0 }, color: if chosen { p.on_surface } else { highlight(p) } },
+                    shadow: shadow(2.0, 6.0, 0.25),
                     ..Default::default()
                 }),
         );
-        let _ = name;
     }
-    let appearance = column![
-        toggler(s.dark).label("Dark").on_toggle(Message::SetDark).size(20).text_size(14),
-        row![text("Accent colour").size(14).width(140), swatches].align_y(Alignment::Center),
-    ]
-    .spacing(14);
+    let appearance = column![setting(p, "Dark mode", switch(s.dark, Message::SetDark)), setting(p, "Accent colour", swatches)].spacing(6);
 
     let names: Vec<String> = stonedgem_url::ENGINES.iter().map(|e| e.name.to_string()).collect();
     let current = stonedgem_url::engine(&s.search).name.to_string();
-    let search = row![
-        text("Search engine").size(14).width(140),
-        pick_list(names, Some(current), |name: String| {
-            let id = stonedgem_url::ENGINES.iter().find(|e| e.name == name).map(|e| e.id).unwrap_or(stonedgem_chrome::SEARCH);
-            Message::SetSearch(id.to_string())
-        })
-        .text_size(14)
-        .padding(Padding::from([6, 12])),
-    ]
-    .align_y(Alignment::Center);
-
+    let engine = pick_list(names, Some(current), |name: String| {
+        let id = stonedgem_url::ENGINES.iter().find(|e| e.name == name).map(|e| e.id).unwrap_or(stonedgem_chrome::SEARCH);
+        Message::SetSearch(id.to_string())
+    })
+    .text_size(14)
+    .padding(Padding::from([8, 14]));
     let home = row![
-        text("Home page").size(14).width(140),
-        text_input("The StonedGem start page", &b.home_draft).on_input(Message::HomeDraft).on_submit(Message::SaveHome).padding(Padding::from([7, 14])).size(14).style(field(p, p.surface_highest)),
-        button(text("Save").size(13)).on_press(Message::SaveHome).padding(Padding::from([8, 16])).style(filled(p)),
+        text_input("The start page", &b.home_draft).on_input(Message::HomeDraft).on_submit(Message::SaveHome).padding(Padding::from([9, 16])).size(14).width(300).style(field(p, true)),
+        button(text("Save").size(14)).on_press(Message::SaveHome).padding(Padding::from([9, 20])).style(filled(p)),
     ]
-    .spacing(10)
+    .spacing(8)
     .align_y(Alignment::Center);
+    let search = column![setting(p, "Search engine", engine), setting(p, "Home page", home), setting(p, "Reopen tabs on start", switch(s.restore_tabs, Message::SetRestore))].spacing(6);
 
     let (total, ads, trackers) = stonedgem_blocker::blocker::totals();
     let privacy = column![
-        toggler(s.blocker).label("Block ads and trackers").on_toggle(Message::SetBlocker).size(20).text_size(14),
-        toggler(s.hide_elements).label("Hide ad spaces on pages").on_toggle(Message::SetHideElements).size(20).text_size(14),
+        setting(p, "Block ads and trackers", switch(s.blocker, Message::SetBlocker)),
+        setting(p, "Hide ad spaces on pages", switch(s.hide_elements, Message::SetHideElements)),
         text(format!("Blocked so far: {total} requests ({ads} ads, {trackers} trackers).")).size(13).color(p.on_surface_variant),
     ]
-    .spacing(12);
+    .spacing(6);
 
     column![
-        heading(p, "Settings"),
+        heading(p, "Settings", format!("{} preview", product())),
         section(p, "Appearance", appearance),
-        section(p, "Search and home", column![search, home].spacing(14)),
+        section(p, "Search and start", search),
         section(p, "Privacy", privacy),
         section(
             p,
             "About",
-            text("StonedGem browser preview: Servo renders pages, Iced draws this window, the StonedGem blocker checks every request. MIT licence.")
-                .size(13)
+            text(format!("{}: Servo renders pages, Iced draws this window, the StonedGem blocker checks every request. MIT licence.", product()))
+                .size(14)
                 .color(p.on_surface_variant)
         ),
     ]
-    .spacing(18)
+    .spacing(20)
     .into()
 }
+

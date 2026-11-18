@@ -22,3 +22,5 @@ stonedgem-profile = { path = "../stonedgem-profile" }
 stonedgem-theme = { path = "../stonedgem-theme" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Downloads: the same client and certificate handling as OyNIx's updater.
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }

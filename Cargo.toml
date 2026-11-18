@@ -31,6 +31,9 @@ ring = "0.17"
 sha2 = "0.11"
 sha3 = "0.10"
 
-# Servo makes debug builds huge; keep debug info for our crates only.
+# Servo makes debug builds huge and slow: dependencies are built without
+# debug info and optimised, so the window stays responsive in debug builds
+# while our own crates still compile quickly.
 [profile.dev.package."*"]
 debug = false
+opt-level = 2

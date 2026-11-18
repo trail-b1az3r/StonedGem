@@ -1,0 +1,49 @@
+# Builds the OyNIx Next preview (stonedgem-browser on Servo) and attaches
+# the tarball to the run. Run it from Actions › OyNIx Next, or push a tag
+# such as oynix-next-v0.1.0 (which also publishes a pre-release).
+name: OyNIx Next
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["oynix-next-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: System libraries for Servo and the window
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake ninja-build pkg-config python3 \
+            libfontconfig1-dev libfreetype-dev libx11-dev libxkbcommon-dev \
+            libwayland-dev libegl1-mesa-dev libgl1-mesa-dev libgles-dev \
+            xvfb xdotool imagemagick
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Engine and window tests
+        run: |
+          cargo test -p stonedgem-engine -p stonedgem-chrome
+      - name: Package
+        run: scripts/package-oynix-next.sh
+      - name: Window check under Xvfb
+        run: |
+          mkdir -p shots
+          BROWSER=target/release/stonedgem-browser xvfb-run -a -s "-screen 0 1200x800x24" crates/stonedgem-chrome/xvfb-check.sh shots || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oynix-next
+          path: |
+            dist/*.tar.gz
+            shots/*.png
+      - name: Pre-release
+        if: startsWith(github.ref, 'refs/tags/oynix-next-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz --prerelease --title "OyNIx Next ${GITHUB_REF_NAME#oynix-next-v} (preview)" --notes "Preview of the next OyNIx on StonedGem (Servo engine, Iced window). Runs alongside OyNIx with its own profile."

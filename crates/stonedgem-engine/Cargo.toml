@@ -17,5 +17,9 @@ http = "1.4"
 dpi = "0.1"
 # Same major as servo-embedder-traits, for its `Destination`.
 content-security-policy = "0.9"
+# Servo's TLS uses aws-lc-rs. A product that also links ring through another
+# crate (e.g. an HTTP client) leaves rustls unable to choose, so the engine
+# installs aws-lc-rs as the process-wide provider (Engine::headless).
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
 stonedgem-blocker = { path = "../stonedgem-blocker" }
 stonedgem-url = { path = "../stonedgem-url" }
