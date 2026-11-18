@@ -14,6 +14,8 @@ pub enum Action {
     RunJs(String),
     Css(String),
     Notify(String),
+    /// Set a property of the extension's Slint panel.
+    PanelSet(String, serde_json::Value),
 }
 
 #[derive(Default)]
@@ -27,7 +29,8 @@ struct PageCtx {
 /// The loaded scripts of enabled extensions.
 #[derive(Default)]
 pub struct Scripts {
-    progs: Vec<(String, Program, Rc<RefCell<PageCtx>>)>,
+    /// (extension id, name, program, context)
+    progs: Vec<(String, String, Program, Rc<RefCell<PageCtx>>)>,
     /// Scripts that failed to load (shown in Settings).
     pub errors: Vec<String>,
 }
@@ -54,6 +57,12 @@ fn api(it: &mut Interp, ctx: Rc<RefCell<PageCtx>>) {
         Ok(Value::Null)
     });
     let c = ctx.clone();
+    it.register("panel_set", move |_, a| {
+        let k = a.first().map(|v| v.to_string()).unwrap_or_default();
+        c.borrow_mut().actions.push(Action::PanelSet(k, crate::bridge::to_json(a.get(1).unwrap_or(&Value::Null))));
+        Ok(Value::Null)
+    });
+    let c = ctx.clone();
     it.register("store_get", move |_, a| Ok(c.borrow().store.get(&a.first().map(|v| v.to_string()).unwrap_or_default()).cloned().unwrap_or(Value::Null)));
     let c = ctx;
     it.register("store_set", move |_, a| {
@@ -71,7 +80,7 @@ impl Scripts {
             let ctx = Rc::new(RefCell::new(PageCtx::default()));
             let c2 = ctx.clone();
             match stonedgem_extensions::zscript::load(std::path::Path::new(&e.path), move |it| api(it, c2)) {
-                Ok(p) => s.progs.push((e.name.clone(), p, ctx)),
+                Ok(p) => s.progs.push((e.id.clone(), e.name.clone(), p, ctx)),
                 Err(err) => s.errors.push(format!("{}: {err}", e.name)),
             }
         }
@@ -91,7 +100,7 @@ impl Scripts {
     /// a notification naming it.
     pub fn page_loaded(&mut self, url: &str, title: &str) -> Vec<(String, Action)> {
         let mut out = vec![];
-        for (name, prog, ctx) in &mut self.progs {
+        for (_, name, prog, ctx) in &mut self.progs {
             {
                 let mut c = ctx.borrow_mut();
                 c.url = url.to_string();
@@ -106,6 +115,41 @@ impl Scripts {
             }
         }
         out
+    }
+}
+
+impl Scripts {
+    /// A content script of extension `ext` called `chrome.runtime.sendMessage(msg)`
+    /// from page `url`: run the script's `on message (msg, sender)` handlers.
+    /// The first non-null `return` value is the reply. `None`: the extension
+    /// has no script. Actions the handler asked for are returned too.
+    pub fn message(&mut self, ext: &str, msg: Value, url: &str) -> Option<(Result<Value, String>, Vec<Action>)> {
+        let sender = Value::map([("url".to_string(), Value::str(url))].into_iter().collect());
+        self.event(ext, "message", vec![msg, sender], Some(url))
+    }
+
+    /// Extension `ext`'s Slint panel invoked callback `name`: run its
+    /// script's `on panel (name, args)` handlers.
+    pub fn panel(&mut self, ext: &str, name: &str, args: Vec<Value>) -> Option<(Result<Value, String>, Vec<Action>)> {
+        self.event(ext, "panel", vec![Value::str(name), Value::list(args)], None)
+    }
+
+    fn event(&mut self, ext: &str, event: &str, args: Vec<Value>, url: Option<&str>) -> Option<(Result<Value, String>, Vec<Action>)> {
+        let (_, name, prog, ctx) = self.progs.iter_mut().find(|p| p.0 == ext)?;
+        {
+            let mut c = ctx.borrow_mut();
+            if let Some(u) = url {
+                c.url = u.to_string();
+            }
+            c.actions.clear();
+        }
+        let r = prog
+            .interp
+            .emit_values(event, None, args)
+            .map(|vs| vs.into_iter().find(|v| !matches!(v, Value::Null)).unwrap_or(Value::Null))
+            .map_err(|e| format!("{name}: {e}"));
+        let actions = ctx.borrow_mut().actions.drain(..).collect();
+        Some((r, actions))
     }
 }
 

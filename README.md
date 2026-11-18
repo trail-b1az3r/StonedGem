@@ -22,7 +22,10 @@ services already moved out of OyNIx — and OyNIx uses them:
 | [`stonedgem-theme`](crates/stonedgem-theme) | Material 3 colour schemes from one accent colour (the window's and extension themes') |
 | [`stonedgem-engine`](crates/stonedgem-engine) | Servo behind StonedGem's own types, with the blocker on every request (spike; `cargo test -p stonedgem-engine`) |
 
-The engine works (see [docs/ENGINE-SPIKE.md](docs/ENGINE-SPIKE.md)) and a first browser window runs on it; the extension runtime is planned, not built.
+The engine works (see [docs/ENGINE-SPIKE.md](docs/ENGINE-SPIKE.md)) and a browser window runs on it, with
+the extension runtime: content scripts (OyNIx and Chrome/Firefox, with a first set of `chrome.*` APIs),
+power extensions' `network.ts`, start-page widgets, extension pages, and extension panels in Slint
+(`panel.slint`), scripted in Z#++.
 
 ![StonedGem showing Wikipedia, with find in page](docs/screenshots/browser-find.png)
 

@@ -78,25 +78,49 @@ floating translucent panel over a gradient backdrop, raised/inset touches,
 Checked under Xvfb with `crates/stonedgem-chrome/xvfb-check.sh`, which
 drives every page and takes the screenshots in [screenshots/](screenshots/).
 
-## Phase 6 — extension runtime and Slint panels (in progress)
+## Phase 6 — extension runtime and Slint panels ✅
 
-Done: OyNIx-format extensions' content scripts and styles run in the
-window. `stonedgem-extensions::matching` implements WebExtension match
-patterns (in Rust, and as a JavaScript guard so a script stays correct
-after the page navigates); `registry::page_scripts` gives each enabled
-extension's script wrapped in its guard and `run_at`. Settings ›
-Extensions installs an unpacked `.oynix` folder, switches extensions on
-and off, and removes them. Tested end to end in Servo: the matching
-extension runs after the DOM is ready, another site's doesn't, its
-`content.css` applies.
+OyNIx-format extensions' content scripts and styles run in the window.
+`stonedgem-extensions::matching` implements WebExtension match patterns
+(in Rust, and as a JavaScript guard so a script stays correct after the
+page navigates); `registry::page_scripts` gives each enabled extension's
+script wrapped in its guard and `run_at`. Settings › Extensions installs
+an unpacked `.oynix` folder, switches extensions on and off, and removes
+them.
 
-Next: `network.ts` on the engine's request hook, widgets and extension
-pages, then QML panels as Slint windows and the `chrome.*` APIs.
+On top of that (`stonedgem-chrome`: `bridge`, `exthub`, `panels`):
 
-Content scripts, `network.ts`, widgets and pages on the engine hooks;
-QML panels (`graphics.qt`) rewritten as Slint windows; the `chrome.*`
-APIs one by one, each with tests. [COMPATIBILITY.md](COMPATIBILITY.md) is
-updated as each lands.
+- **The page↔browser bridge.** Servo has no QWebChannel: pages queue
+  messages that the window collects a few times a second and answers by
+  calling back into the page (`bridge.rs`). OyNIx's `qwebchannel.js` is
+  replaced by a stand-in with the same `post(id, kind, json)` shape, so
+  OyNIx's extension pages run unchanged.
+- **`network.ts`** (power extensions) runs in a hidden background page per
+  extension, with a per-start token: `block` (runtime blocker rules; the
+  blocker is rebuilt), `onRequest` (the engine's `load_web_resource` hook
+  feeds `netrules::observe`), `fetch` (no cross-origin limits, on a worker
+  thread). `setRequestHeader` is recorded but can't be applied (see
+  COMPATIBILITY.md).
+- **`chrome.*` for Chrome/Firefox content scripts**: `runtime.id`,
+  `getManifest`, `sendMessage` (answered by the extension's Z#++ `on
+  message` handler), `storage.local`, `tabs.create`.
+- **Widgets** are cards on the start page; **extension pages**
+  (`extra.html`, `extra.md`) open in a tab from the menu.
+- **Panels in Slint.** QML panels (`graphics.qt`) need a QML runtime, so
+  StonedGem's panels are `panel.slint`: interpreted (`slint-interpreter`),
+  drawn by Slint's software renderer beside the page, with pointer and
+  scroll events passed in. Callbacks run the extension's Z#++ `on panel`
+  handlers; `panel_set` changes the panel's properties.
+
+Tested in Servo end to end (`tests/ext_runtime.rs`: `network.ts` blocks,
+observes and fetches; a Chrome extension's content script uses storage,
+messaging and tabs; a widget draws on the start page), `tests/slint_panel.rs`
+(a panel draws, is clicked, its script updates it), and in the window
+under Xvfb ([screenshot](screenshots/extension-panel.png)).
+
+Not yet: Chrome/Firefox background pages, popups and options pages, and
+the rest of the `chrome.*` APIs (each added only with a test);
+`theme-shape.qml` (needs a Slint/Iced shape description).
 
 ## Phase 7 — Z#++ ✅
 

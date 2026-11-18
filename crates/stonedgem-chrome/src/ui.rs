@@ -520,11 +520,23 @@ fn context_rows(c: &crate::ContextMenu) -> (usize, usize) {
     (r, d)
 }
 
+/// Extensions with a panel (`panel.slint`) or a page (`extra.html`).
+fn ext_entries(b: &Browser) -> impl Iterator<Item = &stonedgem_extensions::registry::Entry> {
+    b.extensions.iter().filter(|e| e.enabled && (e.has_slint_panel || e.has_page))
+}
+
+/// The main menu's rows and dividers.
+pub fn menu_rows(b: &Browser) -> (usize, usize) {
+    let n = ext_entries(b).count();
+    (9 + n, if n > 0 { 3 } else { 2 })
+}
+
 /// Where the open popup sits in the window (x, y, w, h), if one is open.
 pub fn popup_rect(b: &Browser) -> Option<(f32, f32, f32, f32)> {
     let chrome = CHROME_HEIGHT + if b.find.is_some() { FIND_HEIGHT } else { 0.0 };
     if b.menu {
-        return Some((b.view_width() as f32 - 16.0 - MENU_W, chrome - 10.0, MENU_W, popup_height(9, 2)));
+        let (r, d) = menu_rows(b);
+        return Some((b.window_width() as f32 - 16.0 - MENU_W, chrome - 10.0, MENU_W, popup_height(r, d)));
     }
     if let Some(c) = &b.context {
         let (r, d) = context_rows(c);
@@ -536,7 +548,7 @@ pub fn popup_rect(b: &Browser) -> Option<(f32, f32, f32, f32)> {
     }
     if let Some((t, _)) = &b.toast {
         let w = toast_width(t);
-        return Some(((b.view_width() as f32 - w) / 2.0, b.window_height() as f32 - 24.0 - TOAST_H, w, TOAST_H));
+        return Some(((b.window_width() as f32 - w) / 2.0, b.window_height() as f32 - 24.0 - TOAST_H, w, TOAST_H));
     }
     None
 }
@@ -619,10 +631,26 @@ fn menu(b: &Browser) -> Element<'_, Message> {
         menu_item(p, "Settings", "Ctrl+,", Some(Message::Open(Internal::Settings))),
         menu_item(p, "Z#++ playground", "", Some(Message::Open(Internal::Zsharp))),
         menu_divider(p),
-        menu_item(p, "Quit", "", Some(Message::Quit)),
     ]
     .spacing(2);
-    popup(b, list, MENU_W, popup_height(9, 2))
+    let mut list = list;
+    let mut any = false;
+    for e in ext_entries(b) {
+        any = true;
+        let (hint, msg) = if e.has_slint_panel {
+            let open = b.panel.as_ref().is_some_and(|x| x.ext == e.id);
+            (if open { "Panel ✓" } else { "Panel" }, if open { Message::ClosePanel } else { Message::OpenPanel(e.id.clone()) })
+        } else {
+            ("Page", Message::OpenExtPage(e.id.clone()))
+        };
+        list = list.push(menu_item(p, &e.name, hint, Some(msg)));
+    }
+    if any {
+        list = list.push(menu_divider(p));
+    }
+    let list = list.push(menu_item(p, "Quit", "", Some(Message::Quit)));
+    let (r, d) = menu_rows(b);
+    popup(b, list, MENU_W, popup_height(r, d))
 }
 
 fn context_menu<'a>(b: &'a Browser, c: &'a crate::ContextMenu) -> Element<'a, Message> {
@@ -660,6 +688,41 @@ fn context_menu<'a>(b: &'a Browser, c: &'a crate::ContextMenu) -> Element<'a, Me
 // ── Content ──────────────────────────────────────────────────────────
 
 fn content(b: &Browser) -> Element<'_, Message> {
+    match &b.panel {
+        Some(panel) => row![page_area(b), side_panel(b, panel)].into(),
+        None => page_area(b),
+    }
+}
+
+/// An extension's Slint panel beside the page: a glass column with the
+/// extension's name and a close button above what the panel draws.
+fn side_panel<'a>(b: &'a Browser, panel: &'a stonedgem_chrome::panels::Panel) -> Element<'a, Message> {
+    let p = b.palette;
+    let head = row![
+        text(panel.title.as_str()).size(14).font(BOLD).color(p.on_surface),
+        space().width(Length::Fill),
+        icon(p, "✕", Some(Message::ClosePanel)),
+    ]
+    .align_y(Alignment::Center)
+    .height(crate::PANEL_HEAD)
+    .padding(Padding { top: 0.0, right: 4.0, bottom: 0.0, left: 16.0 });
+    let body: Element<'a, Message> = match &b.panel_frame {
+        Some(h) => image(h.clone()).width(Length::Fill).height(Length::Fill).content_fit(iced::ContentFit::None).into(),
+        None => space().width(Length::Fill).height(Length::Fill).into(),
+    };
+    let body = mouse_area(container(body).width(Length::Fill).height(Length::Fill).align_top(Length::Fill))
+        .on_move(Message::PanelMoved)
+        .on_press(Message::PanelPressed)
+        .on_release(Message::PanelReleased)
+        .on_scroll(Message::PanelScrolled);
+    row![
+        container(space()).width(1).height(Length::Fill).style(move |_: &Theme| container::Style { background: Some(Background::Color(alpha(p.outline_variant, 0.7))), ..Default::default() }),
+        container(column![head, line(alpha(p.outline_variant, 0.5)), body]).width(crate::PANEL_W - 1.0).height(Length::Fill).style(move |_: &Theme| glass_bar(p)),
+    ]
+    .into()
+}
+
+fn page_area(b: &Browser) -> Element<'_, Message> {
     let Some(t) = b.tab() else { return space().into() };
     match &t.content {
         Content::Web(_) => {

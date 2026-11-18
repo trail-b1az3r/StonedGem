@@ -68,6 +68,8 @@ pub struct Entry {
     pub world: String,
     /// Has `graphics.qt` (a QML panel shown from the toolbar).
     pub has_panel: bool,
+    /// Has `panel.slint` (a Slint panel, for browsers without QML: StonedGem).
+    pub has_slint_panel: bool,
     /// Has `extra.html` (a page shown from the toolbar when there's no panel).
     pub has_page: bool,
     /// Number of records in `extra.jsonl`.
@@ -1287,7 +1289,17 @@ fn prepare_oynix(dir: &Path, e: &mut Entry, power: bool) -> Result<(), String> {
     }
     compile_code(dir)?;
     e.data_records = read_data(dir)?.len();
+    e.has_slint_panel = dir.join("panel.slint").exists();
+    if e.has_slint_panel {
+        let src = std::fs::read_to_string(dir.join("panel.slint")).map_err(|e| format!("panel.slint: {e}"))?;
+        host::check_slint(&src, dir)?;
+    }
     e.has_panel = dir.join("graphics.qt").exists();
+    if e.has_panel && e.has_slint_panel && !host::has_qml() {
+        // A browser without QML shows the Slint panel instead.
+        e.has_panel = false;
+        e.warnings.push("this browser shows panel.slint; graphics.qt is for OyNIx".into());
+    }
     if e.has_panel {
         let qml = std::fs::read_to_string(dir.join("graphics.qt")).map_err(|e| format!("graphics.qt: {e}"))?;
         host::check_qml(&qml)?;
@@ -1474,6 +1486,58 @@ pub fn page_scripts(list: &[Entry]) -> Vec<String> {
     list.iter().filter(|e| e.enabled && e.kind == "oynix").filter_map(page_script).collect()
 }
 
+/// Content scripts of enabled Chrome/Firefox extensions, for a browser
+/// that injects into every page (Servo): each `content_scripts` entry is
+/// wrapped in its match guard and `run_at` timing, after `api(entry,
+/// manifest)` — the browser's `chrome`/`browser` stand-in — so the code
+/// finds `chrome.*` as it expects.
+pub fn webext_page_scripts(list: &[Entry], api: impl Fn(&Entry, &Value) -> String) -> Vec<String> {
+    let mut out = vec![];
+    for e in list.iter().filter(|e| e.enabled && e.is_webext() && e.kind != "oynix") {
+        let Some(manifest) = read_manifest(e) else { continue };
+        let dir = Path::new(&e.path);
+        let Some(list) = manifest.get("content_scripts").and_then(Value::as_array) else { continue };
+        for cs in list {
+            let strs = |k: &str| -> Vec<String> {
+                cs.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default()
+            };
+            let matches: Vec<String> = strs("matches").iter().map(|m| gm_pattern(m)).collect();
+            if matches.is_empty() {
+                continue;
+            }
+            let guard = crate::matching::guard_js(&matches, &strs("exclude_matches"));
+            let mut body = String::new();
+            let css: String = strs("css").iter().filter_map(|f| std::fs::read_to_string(dir.join(f.trim_start_matches('/'))).ok()).collect::<Vec<_>>().join("\n");
+            if !css.trim().is_empty() {
+                body.push_str(&format!(
+                    "(function(){{var s=document.createElement('style');s.dataset.oynixExtension={};s.textContent={};(document.head||document.documentElement).appendChild(s);}})();\n",
+                    serde_json::to_string(&e.id).unwrap_or_default(),
+                    serde_json::to_string(&css).unwrap_or_default()
+                ));
+            }
+            for f in strs("js") {
+                if f.ends_with(SHIM_FILE) {
+                    continue;
+                }
+                if let Ok(t) = std::fs::read_to_string(dir.join(f.trim_start_matches('/'))) {
+                    body.push_str(&format!("// ── {f}\n{t}\n;\n"));
+                }
+            }
+            if body.is_empty() {
+                continue;
+            }
+            let when = cs.get("run_at").and_then(Value::as_str).unwrap_or("document_idle");
+            out.push(format!(
+                "(function () {{\n  if (!{guard}) return;\n{shim}\n  var run = function () {{\n{body}\n  }};\n  if ({start}) run();\n  else if ({idle}) {{ if (document.readyState === 'complete') run(); else window.addEventListener('load', run, {{ once: true }}); }}\n  else if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, {{ once: true }});\n  else run();\n}})();\n",
+                shim = api(e, &manifest),
+                start = when == "document_start",
+                idle = when == "document_idle",
+            ));
+        }
+    }
+    out
+}
+
 /// One extension's guarded page script (see [`page_scripts`]).
 pub fn page_script(e: &Entry) -> Option<String> {
     let body = oynix_script(e)?;
@@ -1605,6 +1669,12 @@ fn install_inner(source: &Path, staging: &Path, base: &Path, list: &mut Vec<Entr
         }
     } else {
         prepare_webext(&dir, &mut e, crx_key.as_deref(), from_xpi)?;
+        // A Chrome/Firefox extension may also carry a Z#++ script: in
+        // StonedGem it answers its content scripts' runtime.sendMessage.
+        e.has_script = crate::zscript::has_script(&dir);
+        if e.has_script {
+            crate::zscript::check(&dir)?;
+        }
     }
     finish_install(e, &dir, base, list)
 }

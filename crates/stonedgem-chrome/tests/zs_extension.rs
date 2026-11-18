@@ -87,6 +87,7 @@ on page_load "http://127.0.0.1*" (url, title) {
                 assert_eq!(t, "Tidy ran on Shop (1)");
                 continue;
             }
+            Action::PanelSet(..) => unreachable!("no panel_set in this script"),
         };
         page.eval(&engine, &js, Duration::from_secs(5)).unwrap();
     }

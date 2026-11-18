@@ -219,6 +219,12 @@ impl Interp {
     /// Run the `on <event>` handlers; `subject` is matched against each
     /// handler's filter (a glob such as `*://example.com/*`). Returns how many ran.
     pub fn emit(&mut self, event: &str, subject: Option<&str>, args: Vec<Value>) -> Result<usize, String> {
+        self.emit_values(event, subject, args).map(|v| v.len())
+    }
+
+    /// Like [`Interp::emit`], returning each handler's `return` value
+    /// (`null` for a handler that doesn't return one).
+    pub fn emit_values(&mut self, event: &str, subject: Option<&str>, args: Vec<Value>) -> Result<Vec<Value>, String> {
         self.reset_budget();
         let hs: Vec<(Vec<String>, Rc<Vec<Stmt>>)> = self
             .handlers
@@ -231,17 +237,19 @@ impl Interp {
             })
             .map(|h| (h.params.clone(), h.body.clone()))
             .collect();
+        let mut out = Vec::with_capacity(hs.len());
         for (params, body) in &hs {
             let env = new_scope(Some(self.globals.clone()));
             for (i, p) in params.iter().enumerate() {
                 env.borrow_mut().vars.insert(p.clone(), args.get(i).cloned().unwrap_or(Value::Null));
             }
             match self.exec_block(body, &env) {
-                Ok(()) | Err(Ctrl::Return(_)) => {}
+                Ok(()) => out.push(Value::Null),
+                Err(Ctrl::Return(v)) => out.push(v),
                 Err(c) => return Err(self.describe(c)),
             }
         }
-        Ok(hs.len())
+        Ok(out)
     }
 
     // ── Statements ─────────────────────────────────────────────────────

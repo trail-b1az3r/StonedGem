@@ -20,7 +20,7 @@ use stonedgem_chrome::session::Session;
 use stonedgem_chrome::settings::Settings;
 use stonedgem_chrome::{
     address_to_url, after_close, element_at_script, find, page_key, recordable, shortcut, url_to_address, zoom_step, Internal,
-    start_page, Shortcut, TabInfo,
+    Shortcut, TabInfo,
 };
 use stonedgem_engine::{Engine, Load, Page};
 use stonedgem_library::Library;
@@ -29,6 +29,9 @@ use stonedgem_library::Library;
 pub const CHROME_HEIGHT: f32 = 98.0;
 /// The find bar, when open.
 pub const FIND_HEIGHT: f32 = 44.0;
+/// An extension's Slint panel, beside the page (its title row is 44 high).
+pub const PANEL_W: f32 = 320.0;
+pub const PANEL_HEAD: f32 = 44.0;
 pub const ADDRESS: &str = "address";
 pub const FIND: &str = "find";
 pub const HISTORY_SEARCH: &str = "history-search";
@@ -137,6 +140,13 @@ pub struct Browser {
     glass_pointer: Option<Point>,
     glass_dirty: bool,
     window_h: f32,
+    window_w: f32,
+    /// Background pages (network.ts) and the chrome.* bridge.
+    hub: stonedgem_chrome::exthub::ExtHub,
+    /// The open extension panel and its last frame.
+    pub panel: Option<stonedgem_chrome::panels::Panel>,
+    pub panel_frame: Option<image::Handle>,
+    panel_pointer: Point,
 }
 
 #[derive(Debug, Clone)]
@@ -180,6 +190,13 @@ pub enum Message {
     ExtInstall,
     ExtToggle(String),
     ExtRemove(String),
+    OpenPanel(String),
+    ClosePanel,
+    PanelMoved(Point),
+    PanelPressed,
+    PanelReleased,
+    PanelScrolled(mouse::ScrollDelta),
+    OpenExtPage(String),
     FindOpen,
     FindQuery(String),
     FindStep(i32),
@@ -242,6 +259,11 @@ impl Browser {
             glass_pointer: None,
             glass_dirty: false,
             window_h: 800.0,
+            window_w: 1200.0,
+            hub: Default::default(),
+            panel: None,
+            panel_frame: None,
+            panel_pointer: Point::ORIGIN,
         };
         b.reload_extensions();
         match Session::load().filter(|_| b.settings.restore_tabs) {
@@ -266,7 +288,7 @@ impl Browser {
 
     fn home_url(&self) -> String {
         if self.settings.home.trim().is_empty() {
-            start_page(product())
+            self.start_url()
         } else {
             address_to_url(&self.settings.home, &self.settings.search)
         }
@@ -294,6 +316,56 @@ impl Browser {
         let info = TabInfo { title: page.title().into(), url: page.address().into(), loading: false };
         self.tabs.push(Tab { content: Content::Internal(page), info, recorded: String::new() });
         self.select(self.tabs.len() - 1);
+    }
+
+    /// The start page, with enabled extensions' widgets.
+    fn start_url(&self) -> String {
+        let widgets: Vec<(String, String)> = self
+            .extensions
+            .iter()
+            .filter(|e| e.enabled && e.has_widget)
+            .filter_map(|e| stonedgem_extensions::registry::widget_html(e, stonedgem_chrome::WIDGET_THEME).ok().map(|h| (e.name.clone(), h)))
+            .collect();
+        stonedgem_chrome::start_page_with(product(), &widgets)
+    }
+
+    /// Size the page (and the panel beside it) to the window.
+    fn layout(&mut self) {
+        let side = if self.panel.is_some() { PANEL_W } else { 0.0 };
+        self.view = ((self.window_w - side).max(1.0) as u32, (self.window_h - CHROME_HEIGHT).max(1.0) as u32);
+        if let Some(p) = self.page() {
+            self.engine.resize(p, self.view.0, self.page_height());
+        }
+        let h = (self.window_h - CHROME_HEIGHT - PANEL_HEAD).max(1.0) as u32;
+        if let Some(panel) = self.panel.as_mut() {
+            panel.resize(PANEL_W as u32, h);
+        }
+    }
+
+    fn panel_actions(&mut self, ext: &str, actions: Vec<stonedgem_chrome::zs_hooks::Action>) {
+        use stonedgem_chrome::zs_hooks::Action;
+        for a in actions {
+            match a {
+                Action::PanelSet(k, v) => {
+                    if let Some(p) = self.panel.as_ref().filter(|p| p.ext == ext) {
+                        if let Err(e) = p.set(&k, &v) {
+                            self.notify(e);
+                        }
+                    }
+                }
+                Action::Notify(t) => self.notify(t),
+                Action::RunJs(js) => {
+                    if let Some(p) = self.page() {
+                        let _ = p.eval(&self.engine, &js, Duration::from_secs(2));
+                    }
+                }
+                Action::Css(css) => {
+                    if let Some(p) = self.page() {
+                        let _ = p.eval(&self.engine, &stonedgem_chrome::zs_hooks::css_js(&css), Duration::from_secs(2));
+                    }
+                }
+            }
+        }
     }
 
     fn page_height(&self) -> u32 {
@@ -383,7 +455,21 @@ impl Browser {
     /// reloaded ones) get them.
     fn reload_extensions(&mut self) {
         self.extensions = stonedgem_extensions::registry::load();
-        self.ext_scripts = stonedgem_extensions::registry::page_scripts(&self.extensions);
+        let (scripts, content_api) = stonedgem_chrome::exthub::page_scripts(&self.extensions);
+        self.ext_scripts = scripts;
+        let dropped = self.hub.stop();
+        self.hub = stonedgem_chrome::exthub::ExtHub::start(&self.engine, &self.extensions);
+        self.hub.content_api = content_api;
+        if dropped {
+            stonedgem_blocker::blocker::init(vec![]);
+        }
+        if let Some(id) = self.panel.as_ref().map(|p| p.ext.clone()) {
+            if !self.extensions.iter().any(|e| e.id == id && e.enabled && e.has_slint_panel) {
+                self.panel = None;
+                self.panel_frame = None;
+                self.layout();
+            }
+        }
         stonedgem_blocker::blocker::set_extension_filters(stonedgem_extensions::registry::filter_files(&self.extensions));
         self.zs = stonedgem_chrome::zs_hooks::Scripts::load(&self.extensions);
     }
@@ -391,6 +477,10 @@ impl Browser {
     fn notify(&mut self, text: impl Into<String>) {
         self.toast = Some((text.into(), self.ticks + 240));
         self.glass_dirty = true;
+    }
+
+    pub fn window_width(&self) -> u32 {
+        self.window_w as u32
     }
 
     pub fn window_height(&self) -> u32 {
@@ -527,6 +617,12 @@ impl Browser {
                                     self.notify(t);
                                     continue;
                                 }
+                                Action::PanelSet(k, v) => {
+                                    if let Some(p) = self.panel.as_ref().filter(|p| p.ext == _ext) {
+                                        let _ = p.set(&k, &v);
+                                    }
+                                    continue;
+                                }
                             };
                             if let Some(Tab { content: Content::Web(p), .. }) = self.tabs.get(i) {
                                 let _ = p.eval(&self.engine, &js, Duration::from_secs(2));
@@ -557,6 +653,48 @@ impl Browser {
                         }
                     }
                 }
+                // Extensions: network.ts pages and chrome.* calls, ~6 times a second.
+                if self.ticks.is_multiple_of(10) && (!self.hub.background.is_empty() || self.hub.content_api) {
+                    use stonedgem_chrome::exthub::Effect;
+                    let tabs: Vec<(usize, &Page)> = self.tabs.iter().enumerate().filter_map(|(i, t)| t.page().map(|p| (i, p))).collect();
+                    let fx = self.hub.pump(&self.engine, &tabs, &mut self.zs, &self.extensions);
+                    for f in fx {
+                        match f {
+                            Effect::OpenTab(u) => self.open_web(&u),
+                            Effect::Notify(t) => self.notify(t),
+                            Effect::RunJs(i, js) => {
+                                if let Some(p) = self.tabs.get(i).and_then(Tab::page) {
+                                    let _ = p.eval(&self.engine, &js, Duration::from_secs(2));
+                                }
+                            }
+                            Effect::BlockerChanged => stonedgem_blocker::blocker::init(vec![]),
+                            Effect::PanelSet(ext, k, v) => {
+                                if let Some(p) = self.panel.as_ref().filter(|p| p.ext == ext) {
+                                    let _ = p.set(&k, &v);
+                                }
+                            }
+                        }
+                    }
+                }
+                // The extension panel: callbacks to its script, then draw.
+                if let Some(events) = self.panel.as_ref().map(|p| (p.ext.clone(), p.take_events())) {
+                    let (ext, events) = events;
+                    for (name, args) in events {
+                        let args = args.iter().map(stonedgem_chrome::bridge::from_json).collect();
+                        if let Some((r, actions)) = self.zs.panel(&ext, &name, args) {
+                            if let Err(e) = r {
+                                self.notify(e);
+                            }
+                            self.panel_actions(&ext, actions);
+                        }
+                    }
+                }
+                if let Some(panel) = self.panel.as_mut() {
+                    if let Some(px) = panel.render() {
+                        let (w, h) = panel.size();
+                        self.panel_frame = Some(image::Handle::from_rgba(w, h, px));
+                    }
+                }
                 if self.find.as_ref().and_then(|f| f.due).is_some_and(|t| self.ticks >= t) {
                     if let Some(f) = self.find.as_mut() {
                         f.due = None;
@@ -570,10 +708,8 @@ impl Browser {
             }
             Message::Resized(size) => {
                 self.window_h = size.height;
-                self.view = (size.width.max(1.0) as u32, (size.height - CHROME_HEIGHT).max(1.0) as u32);
-                if let Some(p) = self.page() {
-                    self.engine.resize(p, self.view.0, self.page_height());
-                }
+                self.window_w = size.width;
+                self.layout();
             }
             Message::Address(s) => {
                 // Iced's text field takes Ctrl+, as typing a comma: treat it
@@ -603,7 +739,8 @@ impl Browser {
             }
             Message::NewTab => {
                 self.menu = false;
-                self.open_web(&start_page(product()));
+                let url = self.start_url();
+                self.open_web(&url);
                 self.editing = true;
                 self.focus_next = Some(ADDRESS);
             }
@@ -633,6 +770,63 @@ impl Browser {
                 self.pointer = p;
                 if let Some(page) = self.page() {
                     page.mouse_move(p.x, p.y);
+                }
+            }
+            Message::OpenPanel(id) => {
+                self.menu = false;
+                let Some(e) = self.extensions.iter().find(|e| e.id == id) else { return Task::none() };
+                let h = (self.window_h - CHROME_HEIGHT - PANEL_HEAD).max(1.0) as u32;
+                match stonedgem_chrome::panels::Panel::open(&e.id, &e.name, std::path::Path::new(&e.path), PANEL_W as u32, h, self.palette.dark) {
+                    Ok(p) => {
+                        self.panel = Some(p);
+                        self.panel_frame = None;
+                        self.layout();
+                    }
+                    Err(err) => {
+                        let msg = format!("{}: {err}", e.name);
+                        self.notify(msg);
+                    }
+                }
+            }
+            Message::ClosePanel => {
+                self.panel = None;
+                self.panel_frame = None;
+                self.layout();
+            }
+            Message::PanelMoved(p) => {
+                self.panel_pointer = p;
+                if let Some(panel) = &self.panel {
+                    panel.pointer_moved(p.x, p.y);
+                }
+            }
+            Message::PanelPressed => {
+                if let Some(panel) = &self.panel {
+                    panel.pointer_pressed(self.panel_pointer.x, self.panel_pointer.y);
+                }
+            }
+            Message::PanelReleased => {
+                if let Some(panel) = &self.panel {
+                    panel.pointer_released(self.panel_pointer.x, self.panel_pointer.y);
+                }
+            }
+            Message::PanelScrolled(d) => {
+                let (dx, dy) = match d {
+                    mouse::ScrollDelta::Lines { x, y } => (x * 40.0, y * 40.0),
+                    mouse::ScrollDelta::Pixels { x, y } => (x, y),
+                };
+                if let Some(panel) = &self.panel {
+                    panel.scroll(self.panel_pointer.x, self.panel_pointer.y, dx, dy);
+                }
+            }
+            Message::OpenExtPage(id) => {
+                self.menu = false;
+                if let Some(e) = self.extensions.iter().find(|e| e.id == id) {
+                    let dir = std::path::Path::new(&e.path);
+                    let file = ["extra.html", "extra.md.html"].iter().map(|f| dir.join(f)).find(|f| f.exists());
+                    if let Some(f) = file {
+                        let url = format!("file://{}", f.display());
+                        self.open_web(&url);
+                    }
                 }
             }
             Message::Clicked => {
@@ -919,8 +1113,9 @@ fn main() -> iced::Result {
         name: product(),
         trusted_keys: "",
         check_qml: None,
-        webchannel_js: None,
+        webchannel_js: Some(stonedgem_chrome::bridge::webchannel_shim),
     });
+    stonedgem_extensions::host::set_slint_check(stonedgem_chrome::panels::check);
     iced::application(Browser::boot, Browser::update, Browser::view)
         .title(Browser::title)
         .subscription(Browser::subscription)

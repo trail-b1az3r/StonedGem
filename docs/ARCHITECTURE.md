@@ -15,12 +15,11 @@ It separates what **exists and is tested** from what is **planned**.
 | Engine-independent services (address bar, `.poweroynix` verification, password vault, Firefox import) | **Exists**, moved from OyNIx with their tests. OyNIx uses these crates. |
 | Engine binding (Servo) | Spike working, headless — `stonedgem-engine`; see [ENGINE-SPIKE.md](ENGINE-SPIKE.md). |
 | Iced browser chrome | Working — `stonedgem-chrome` (`stonedgem-browser`): tabs, address bar, menu, History, Bookmarks, Settings, find in page, light/dark Material colours. |
-| Extension runtime | Planned — phase 6. |
-| Slint extension UI | Planned — phase 6. |
-| Z#++ scripting | Planned — phase 7. See [ZSHARP.md](ZSHARP.md). |
+| Extension runtime | Working — `stonedgem-chrome` (`bridge`, `exthub`): content scripts, `network.ts`, a first set of `chrome.*` APIs, widgets, extension pages. See [COMPATIBILITY.md](COMPATIBILITY.md). |
+| Slint extension UI | Working — `panel.slint` panels (`stonedgem-chrome::panels`). |
+| Z#++ scripting | Working — `stonedgem-zsharp`. See [ZSHARP.md](ZSHARP.md). |
 
-Nothing below the first row is implemented yet, and nothing should be
-described as working until its crate and tests say so.
+Nothing should be described as working until its crate and tests say so.
 
 ## Layers and boundaries
 
@@ -30,9 +29,9 @@ described as working until its crate and tests say so.
 └───────────────┬───────────────────────────────┬───────────────────────────────────────┘
                 │                               │
    ┌────────────▼────────────┐      ┌───────────▼────────────┐
-   │ stonedgem-chrome (Iced) │      │ stonedgem-extui (Slint)│   separate native windows
-   │ window, tabs, address   │      │ popups, options,       │   (no Iced/Slint embedding)
-   │ bar, menus, settings    │      │ permission dialogs     │
+   │ stonedgem-chrome (Iced) │      │ extension panels (Slint│   Slint draws offscreen;
+   │ window, tabs, address   │      │ software renderer,     │   the window shows its
+   │ bar, menus, settings    │      │ panel.slint)           │   pixels (no embedding)
    └────────────┬────────────┘      └───────────┬────────────┘
                 │        commands / events      │
    ┌────────────▼───────────────────────────────▼────────────┐
@@ -61,9 +60,13 @@ Rules for every boundary:
 - **The engine crate** is the only one that names Servo types. The rest of
   StonedGem sees its own `Engine`, `View`, `LoadDecision`… types, so the
   engine could be replaced without touching the chrome or the runtime.
-- **Iced and Slint never share a window.** The chrome is Iced; extension
-  interfaces are Slint windows the runtime opens. They talk through the
-  runtime's command/event channel, never by calling each other.
+- **Iced and Slint never run inside each other.** The chrome is Iced;
+  extension panels are Slint, interpreted and drawn offscreen by Slint's
+  software renderer into a pixel buffer that the Iced window shows beside
+  the page — the same way it shows Servo's page frames. Neither toolkit's
+  event loop or GPU context is embedded in the other: the window passes
+  pointer and key events to the panel, and the panel's callbacks reach the
+  extension's Z#++ script as events.
 - **Native code** (C++23, D) sits behind a documented C ABI in its own crate,
   with a Rust wrapper. Nothing else links it directly.
 

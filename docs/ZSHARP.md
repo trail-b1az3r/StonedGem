@@ -144,10 +144,20 @@ one stops the script with a message; `try` can't catch it.
 
 ## In StonedGem
 
-- **Extensions**: an `.oynix` package may include `script.zsp`. It's
-  checked at install and runs on `page_load` with `page_url()`,
-  `page_title()`, `inject_css(css)`, `run_js(code)`, `notify(text)`,
-  `store_get(key)`, `store_set(key, value)`.
+- **Extensions**: an `.oynix` package (or a Chrome/Firefox extension)
+  may include `script.zsp`. It's checked at install, and has
+  `page_url()`, `page_title()`, `inject_css(css)`, `run_js(code)`,
+  `notify(text)`, `store_get(key)`, `store_set(key, value)` and
+  `panel_set(property, value)`. Its handlers:
+
+  ```text
+  on page_load "*://*.example.com/*" (url, title) { … }   // a page loaded
+  on message (msg, sender) { return { ok: true } }         // chrome.runtime.sendMessage
+  on panel (name, args) { panel_set("count", args[0]) }    // a panel.slint callback
+  ```
+
+  A `message` handler's `return` value is the reply the content script
+  gets (the first non-null one).
 - **The window**: the start page's art is drawn by a Z#++ program and
   shader; **stonedgem://zsharp** is a playground (editor, Run, output,
   canvas preview).

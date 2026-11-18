@@ -22,6 +22,11 @@ stonedgem-profile = { path = "../stonedgem-profile" }
 stonedgem-theme = { path = "../stonedgem-theme" }
 stonedgem-extensions = { path = "../stonedgem-extensions" }
 stonedgem-zsharp = { path = "../stonedgem-zsharp" }
+# Extension panels (`panel.slint`): interpreted, drawn by Slint's software renderer
+# into a buffer the window shows.
+slint-interpreter = { version = "=1.17.0", default-features = false, features = ["std", "compat-1-2", "renderer-software"] }
+i-slint-core = { version = "=1.17.0", default-features = false, features = ["std"] }
+i-slint-renderer-software = "=1.17.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
 # Downloads: the same client and certificate handling as OyNIx's updater.

@@ -55,3 +55,25 @@ pub(crate) fn check_qml(qml: &str) -> Result<(), String> {
 pub(crate) fn webchannel_js() -> String {
     get().webchannel_js.map(|f| f()).unwrap_or_default()
 }
+
+/// Checks a Slint panel (`panel.slint`) in the extension folder given.
+pub type SlintCheck = fn(&str, &Path) -> Result<(), String>;
+
+static SLINT: OnceLock<SlintCheck> = OnceLock::new();
+
+/// A browser that shows Slint panels sets how to check them (once).
+pub fn set_slint_check(f: SlintCheck) {
+    let _ = SLINT.set(f);
+}
+
+pub(crate) fn has_qml() -> bool {
+    get().check_qml.is_some()
+}
+
+/// Without a checker, `panel.slint` is kept unchecked (the browser doesn't show it).
+pub(crate) fn check_slint(src: &str, dir: &Path) -> Result<(), String> {
+    match SLINT.get() {
+        Some(f) => f(src, dir).map_err(|e| format!("panel.slint: {e}")),
+        None => Ok(()),
+    }
+}
