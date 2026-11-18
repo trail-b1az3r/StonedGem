@@ -84,25 +84,41 @@ fn glass(p: Palette, r: f32) -> container::Style {
     container::Style {
         background: Some(Background::Color(alpha(p.surface_high, if p.dark { 0.72 } else { 0.74 }))),
         border: Border { radius: radius(r), width: 1.0, color: highlight(p) },
-        shadow: shadow(10.0, 30.0, if p.dark { 0.30 } else { 0.12 }),
         ..Default::default()
     }
 }
 
+/// The panel's soft "contact shadow": a gradient strip in the gap under it.
+/// (A real drop shadow gets repainted over the panel by Iced's CPU renderer
+/// when it redraws part of the window.)
+fn contact_shadow(p: Palette) -> container::Style {
+    let g = Linear::new(std::f32::consts::PI)
+        .add_stop(0.0, alpha(Color::BLACK, if p.dark { 0.28 } else { 0.10 }))
+        .add_stop(1.0, alpha(Color::BLACK, 0.0));
+    container::Style {
+        background: Some(Background::Gradient(Gradient::Linear(g))),
+        border: Border { radius: Radius { top_left: 0.0, top_right: 0.0, bottom_right: 12.0, bottom_left: 12.0 }, ..Default::default() },
+        ..Default::default()
+    }
+}
+
+/// Softly raised: a lighter tone and a light edge. (No drop shadow: Iced's
+/// CPU renderer smears small shadows inside a row across the whole row.)
 fn raised(p: Palette, r: f32) -> container::Style {
     container::Style {
-        background: Some(Background::Color(p.surface_highest)),
-        border: Border { radius: radius(r), width: 1.0, color: highlight(p) },
-        shadow: shadow(3.0, 10.0, if p.dark { 0.28 } else { 0.10 }),
+        background: Some(Background::Color(if p.dark { mix(p.surface_highest, Color::WHITE, 0.04) } else { mix(p.surface_highest, Color::WHITE, 0.55) })),
+        border: Border { radius: radius(r), width: 1.0, color: if p.dark { alpha(Color::WHITE, 0.16) } else { alpha(p.outline_variant, 0.9) } },
         ..Default::default()
     }
 }
 
+/// Cards inside scrolling pages: raised by tone and a light edge only.
+/// (No shadow: Iced's CPU renderer doesn't clip shadows to the scroll
+/// area, so they would spill over the panel.)
 fn card_style(p: Palette) -> container::Style {
     container::Style {
         background: Some(Background::Color(alpha(p.surface_container, if p.dark { 0.82 } else { 0.86 }))),
         border: Border { radius: radius(24.0), width: 1.0, color: highlight(p) },
-        shadow: shadow(6.0, 22.0, if p.dark { 0.25 } else { 0.08 }),
         ..Default::default()
     }
 }
@@ -228,8 +244,13 @@ pub fn view(b: &Browser) -> Element<'_, Message> {
     if b.find.is_some() {
         panel = panel.push(find_bar(b));
     }
-    let panel = container(container(panel).padding(Padding { top: 0.0, right: 8.0, bottom: 0.0, left: 8.0 }).style(move |_: &Theme| glass(p, 22.0)))
-        .padding(PANEL_MARGIN);
+    let glass_panel = container(panel).padding(Padding { top: 0.0, right: 8.0, bottom: 0.0, left: 8.0 }).style(move |_: &Theme| glass(p, 22.0));
+    let under = container(container(space()).width(Length::Fill).height(PANEL_MARGIN).style(move |_: &Theme| contact_shadow(p)))
+        .padding(Padding { top: 0.0, right: 24.0, bottom: 0.0, left: 24.0 });
+    let panel = column![
+        container(glass_panel).padding(Padding { top: PANEL_MARGIN, right: PANEL_MARGIN, bottom: 0.0, left: PANEL_MARGIN }),
+        under
+    ];
 
     let main = column![panel, content(b)];
     let base = container(main).width(Length::Fill).height(Length::Fill).style(move |_: &Theme| backdrop(p));
@@ -670,7 +691,6 @@ fn settings(b: &Browser) -> Element<'_, Message> {
                     background: Some(Background::Color(if st == button::Status::Hovered { mix(c, Color::WHITE, 0.12) } else { c })),
                     text_color: Palette::new(hex, p.dark).on_primary,
                     border: Border { radius: radius(17.0), width: if chosen { 2.0 } else { 1.0 }, color: if chosen { p.on_surface } else { highlight(p) } },
-                    shadow: shadow(2.0, 6.0, 0.25),
                     ..Default::default()
                 }),
         );

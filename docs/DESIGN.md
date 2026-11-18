@@ -20,10 +20,18 @@ It borrows from four references and keeps what works on a desktop browser:
 - **Backdrop:** a linear gradient from the surface toward the primary (≈16 %)
   at the top-left and the tertiary (≈10 %) at the bottom-right.
 - **Glass panel:** surface-container-high at ≈72 % (dark) / 74 % (light),
-  1 px highlight edge (white 10 % dark / 70 % light), shadow 0 10 30 at 30 %.
-- **Raised (neumorphic):** surface-container-highest, highlight edge, shadow 0 3 10 at 25 %.
+  1 px highlight edge (white 10 % dark / 70 % light), and a soft contact
+  shadow in the gap below it.
+- **Raised (neumorphic):** a lighter tone than its surroundings and a light edge.
+
 - **Inset:** surface-container-lowest at 55 %, 1 px outline-variant edge.
 - **Popups:** surface-container at 94 %, highlight edge, shadow 0 16 40 at 45 %.
+
+In the Iced window, shadows are kept to popups (menus). Iced's CPU
+renderer repaints drop shadows over neighbouring content when it redraws
+part of the window, so the panel's shadow is a gradient strip, and cards
+and the selected tab are raised by tone and edge. OyNIx (Qt Quick) uses a
+real blurred shadow under its panel.
 
 ## Layout (browser window)
 

@@ -18,7 +18,8 @@ Legend: **Works** · **Planned** (phase in [MIGRATION.md](MIGRATION.md)) ·
 | History, bookmarks, reading list, closed tabs | **Works** (`stonedgem-library`); History and Bookmarks pages in the window; restoring sessions: Planned (5) |
 | Rendering web pages | Spike works headless (`stonedgem-engine`); real-site compatibility not measured yet (4) |
 | Tabs, address bar, start page, menu, settings, find in page | **Works** (`stonedgem-chrome`) |
-| Tree tabs, help, downloads, context menu, zoom | Planned (5) |
+| Downloads, context menu, zoom, reopening tabs | **Works** (`stonedgem-chrome`) |
+| Tree tabs, help | Planned (later) |
 | PDF viewing | Unsupported — Servo has no PDF viewer; needs a PDF renderer |
 | Offline games | Planned (5) — they're native, not web |
 | Built-in updater, AUR | Planned (8) |
