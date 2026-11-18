@@ -37,6 +37,7 @@ Legend: **Works** · **Planned** (phase in [MIGRATION.md](MIGRATION.md)) ·
 | `theme-shape.qml` | **Needs migration** to a Slint/Iced shape description |
 | Power: `network.ts` (block, headers, observe, fetch) | Planned (6) — `load_web_resource` |
 | Power: `filters.txt` | **Works** (`stonedgem-blocker`) |
+| Z#++ extension scripts (`script.zsp`) | **Works**: run on page loads in the sandbox (page_url, page_title, inject_css, run_js, notify, store) |
 | Chrome/Firefox extensions (MV2, MV3) | **Unsupported** for now: Servo has no WebExtensions. APIs will be added one at a time, and an extension counts as working only when tested. Extensions built around popups, storage and content scripts are the likely first; blocking `webRequest`, `debugger`, `proxy` and DevTools pages are unlikely. |
 
 ## Engine capabilities still to prove

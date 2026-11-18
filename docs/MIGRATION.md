@@ -98,10 +98,15 @@ QML panels (`graphics.qt`) rewritten as Slint windows; the `chrome.*`
 APIs one by one, each with tests. [COMPATIBILITY.md](COMPATIBILITY.md) is
 updated as each lands.
 
-## Phase 7 — Z#++
+## Phase 7 — Z#++ ✅
 
-A library build of Z# with a sandbox, behind a C ABI. See
-[ZSHARP.md](ZSHARP.md).
+`stonedgem-zsharp`: Z# kept compatible and greatly extended (see
+[ZSHARP.md](ZSHARP.md)) — `.zsp` programs, `.zsx` headers checked against
+them, `.zsg` GPU kernels and fragment shaders compiled to validated WGSL
+and runnable on the CPU, a 2D canvas, a sandbox, and the `zspp` tool.
+Extensions can ship `script.zsp` (run on page loads with a small API); the
+window draws its start-page art with Z#++ and has a playground at
+`stonedgem://zsharp`.
 
 ## Phase 8 — OyNIx 5.4.0 on StonedGem
 
