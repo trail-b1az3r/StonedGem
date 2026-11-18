@@ -1459,6 +1459,26 @@ pub const PAGE_API: &str = r#"window.oynix = (function () {
 /// Build the injected script for an OyNIx extension: a Greasemonkey header
 /// (Qt WebEngine applies @match / @exclude / @run-at natively), the CSS and
 /// the JS.
+/// The scripts to inject into every page for the enabled OyNIx-format
+/// extensions in `list`, for engines that add one set of user scripts per
+/// page (Servo). Each is wrapped in a guard so it only runs where its
+/// `matches`/`excludes` allow, even after the page navigates, and at its
+/// `run_at` time.
+pub fn page_scripts(list: &[Entry]) -> Vec<String> {
+    list.iter().filter(|e| e.enabled && e.kind == "oynix").filter_map(page_script).collect()
+}
+
+/// One extension's guarded page script (see [`page_scripts`]).
+pub fn page_script(e: &Entry) -> Option<String> {
+    let body = oynix_script(e)?;
+    let guard = crate::matching::guard_js(&e.matches.iter().map(|m| gm_pattern(m)).collect::<Vec<_>>(), &e.excludes);
+    let start = e.run_at == "document_start";
+    let idle = e.run_at == "document_idle";
+    Some(format!(
+        "(function () {{\n  if (!{guard}) return;\n  var run = function () {{\n{body}\n  }};\n  if ({start}) run();\n  else if ({idle}) {{ if (document.readyState === 'complete') run(); else window.addEventListener('load', run, {{ once: true }}); }}\n  else if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, {{ once: true }});\n  else run();\n}})();\n"
+    ))
+}
+
 pub fn oynix_script(e: &Entry) -> Option<String> {
     if e.matches.is_empty() {
         return None;

@@ -28,15 +28,16 @@ xdotool key ctrl+shift+o
 shot 6-bookmarks 2
 xdotool key ctrl+comma
 shot 7-settings 2
-xdotool mousemove 250 231; sleep 0.3; xdotool click 1
+xdotool mousemove 932 304; sleep 0.3; xdotool click 1
 shot 8-settings-light 2
-xdotool mousemove 250 231; sleep 0.3; xdotool click 1
-# Back to the page: right-click a link, save it, see Downloads.
-xdotool mousemove 110 32; sleep 0.3; xdotool click 1; sleep 2
-xdotool mousemove 600 400; sleep 0.3; xdotool click 1; xdotool key Home; sleep 2
-xdotool mousemove 535 494; sleep 0.5; xdotool click 3
+xdotool mousemove 932 304; sleep 0.3; xdotool click 1
+# A page with a link at a known place: right-click it, save it, see Downloads.
+xdotool key ctrl+t; sleep 1
+xdotool type --delay 10 'data:text/html,<title>Links</title><a href="https://example.com/" style="position:fixed;left:200px;top:200px;font:32px sans-serif">example.com</a>'
+xdotool key Return; sleep 3
+xdotool mousemove 280 320; sleep 0.5; xdotool click 3
 shot 9-context 2
-xdotool mousemove 600 598; sleep 0.3; xdotool click 1; sleep 4
+xdotool mousemove 360 424; sleep 0.3; xdotool click 1; sleep 4
 xdotool key ctrl+j
 shot 10-downloads 2
 # Zoom the page.

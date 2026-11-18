@@ -12,6 +12,7 @@
 //! and QML checker, and sets the profile folders (`stonedgem-profile`).
 
 pub mod host;
+pub mod matching;
 pub use stonedgem_theme::material;
 pub mod registry;
 pub mod tscompile;
