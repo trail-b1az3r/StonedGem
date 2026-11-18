@@ -125,7 +125,12 @@ impl Canvas {
     }
 
     fn text(&self, x: f32, y: f32, s: &str, size: f32, c: u32) {
-        let scale = (size / 7.0).max(0.25);
+        // Bitmap glyphs: whole-pixel cells, no anti-aliasing (crisp, and
+        // tiny-skia's AA rect fill rejects sub-pixel slivers).
+        let scale = (size / 7.0).round().max(1.0);
+        let (x, y) = (x.round(), y.round());
+        let mut p = paint(c);
+        p.anti_alias = false;
         let mut cx = x;
         for ch in s.chars() {
             if ch == '\n' {
@@ -136,7 +141,7 @@ impl Canvas {
                     for col in 0..5 {
                         if row & (0b10000 >> col) != 0 {
                             if let Some(r) = Rect::from_xywh(cx + col as f32 * scale, y + ry as f32 * scale, scale, scale) {
-                                self.pix.borrow_mut().fill_rect(r, &paint(c), Transform::identity(), None);
+                                self.pix.borrow_mut().fill_rect(r, &p, Transform::identity(), None);
                             }
                         }
                     }

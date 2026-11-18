@@ -1,0 +1,3 @@
+// Header: what the card program promises to define.
+struct Card { title: string, value: int }
+func draw_card(c: Canvas, card: Card, x: int, y: int)
