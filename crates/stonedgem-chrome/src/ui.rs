@@ -7,11 +7,11 @@
 
 use iced::border::Radius;
 use iced::font::Weight;
-use iced::gradient::Linear;
+
 use iced::widget::{
     button, column, container, image, mouse_area, pick_list, row, scrollable, space, stack, text, text_input, toggler,
 };
-use iced::{Alignment, Background, Border, Color, Element, Font, Gradient, Length, Padding, Shadow, Theme, Vector};
+use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding, Shadow, Theme, Vector};
 
 use stonedgem_chrome::downloads::State as DlState;
 use stonedgem_chrome::palette::Palette;
@@ -25,10 +25,8 @@ const HEAVY: Font = Font { weight: Weight::Bold, ..Font::DEFAULT };
 
 // ── Tokens (docs/DESIGN.md) ──────────────────────────────────────────
 
-/// Gap between the window edge and the floating panel.
-pub const PANEL_MARGIN: f32 = 8.0;
 const TAB_ROW: f32 = 40.0;
-const TOOL_ROW: f32 = 48.0;
+const TOOL_ROW: f32 = 56.0;
 const TARGET: f32 = 40.0;
 
 fn radius(r: f32) -> Radius {
@@ -71,45 +69,49 @@ fn state(p: Palette, base: Option<Color>, s: button::Status) -> Option<Backgroun
     }
 }
 
-/// The page backdrop: something for the glass panel to sit on.
+/// The window backdrop: the plain surface (no gradient).
 fn backdrop(p: Palette) -> container::Style {
-    let g = Linear::new(2.35)
-        .add_stop(0.0, mix(p.surface, p.primary, if p.dark { 0.16 } else { 0.12 }))
-        .add_stop(0.55, p.surface)
-        .add_stop(1.0, mix(p.surface, p.tertiary, if p.dark { 0.10 } else { 0.08 }));
-    container::Style { background: Some(Background::Gradient(Gradient::Linear(g))), ..Default::default() }
+    container::Style { background: Some(Background::Color(p.surface)), ..Default::default() }
 }
 
-fn glass(p: Palette, r: f32) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(alpha(p.surface_high, if p.dark { 0.72 } else { 0.74 }))),
-        border: Border { radius: radius(r), width: 1.0, color: highlight(p) },
-        ..Default::default()
+// ── Liquid Glass (docs/DESIGN.md) ────────────────────────────────────
+
+/// Translucent glass for controls in use (hovered buttons, tabs).
+fn glass_fill(p: Palette) -> Color {
+    alpha(p.surface_highest, if p.dark { 0.55 } else { 0.62 })
+}
+
+/// Glass at rest that must stay legible (address field, selected tab).
+fn glass_strong(p: Palette) -> Color {
+    alpha(p.surface_highest, if p.dark { 0.78 } else { 0.86 })
+}
+
+/// The light rim around glass.
+fn glass_rim(p: Palette) -> Color {
+    if p.dark {
+        alpha(Color::WHITE, 0.14)
+    } else {
+        alpha(p.outline_variant, 0.65)
     }
 }
 
-/// The panel's soft "contact shadow": a gradient strip in the gap under it.
-/// (A real drop shadow gets repainted over the panel by Iced's CPU renderer
-/// when it redraws part of the window.)
-fn contact_shadow(p: Palette) -> container::Style {
-    let g = Linear::new(std::f32::consts::PI)
-        .add_stop(0.0, alpha(Color::BLACK, if p.dark { 0.28 } else { 0.10 }))
-        .add_stop(1.0, alpha(Color::BLACK, 0.0));
-    container::Style {
-        background: Some(Background::Gradient(Gradient::Linear(g))),
-        border: Border { radius: Radius { top_left: 0.0, top_right: 0.0, bottom_right: 12.0, bottom_left: 12.0 }, ..Default::default() },
-        ..Default::default()
+/// The bright specular line along the top edge of glass.
+fn specular(p: Palette) -> Color {
+    if p.dark {
+        alpha(Color::WHITE, 0.20)
+    } else {
+        alpha(Color::WHITE, 0.95)
     }
 }
 
-/// Softly raised: a lighter tone and a light edge. (No drop shadow: Iced's
-/// CPU renderer smears small shadows inside a row across the whole row.)
-fn raised(p: Palette, r: f32) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(if p.dark { mix(p.surface_highest, Color::WHITE, 0.04) } else { mix(p.surface_highest, Color::WHITE, 0.55) })),
-        border: Border { radius: radius(r), width: 1.0, color: if p.dark { alpha(Color::WHITE, 0.16) } else { alpha(p.outline_variant, 0.9) } },
-        ..Default::default()
-    }
+/// The translucent toolbar/tab bar.
+fn glass_bar(p: Palette) -> container::Style {
+    container::Style { background: Some(Background::Color(alpha(p.surface_container, if p.dark { 0.88 } else { 0.86 }))), ..Default::default() }
+}
+
+/// A 1 px line in `c`, full width.
+fn line<'a>(c: Color) -> Element<'a, Message> {
+    container(space()).width(Length::Fill).height(1).style(move |_: &Theme| container::Style { background: Some(Background::Color(c)), ..Default::default() }).into()
 }
 
 /// Cards inside scrolling pages: raised by tone and a light edge only.
@@ -150,8 +152,20 @@ fn icon<'a>(p: Palette, glyph: &'a str, msg: Option<Message>) -> Element<'a, Mes
         .padding(0)
         .on_press_maybe(msg)
         .style(move |_: &Theme, s: button::Status| {
+            // Liquid Glass: clear at rest, a glass capsule with a rim under the pointer.
             let text_color = if s == button::Status::Disabled { alpha(p.on_surface_variant, 0.38) } else { p.on_surface_variant };
-            button::Style { background: state(p, None, s), text_color, border: Border { radius: radius(TARGET / 2.0), ..Default::default() }, ..Default::default() }
+            let glassy = matches!(s, button::Status::Hovered | button::Status::Pressed);
+            let bg = match s {
+                button::Status::Hovered => Some(Background::Color(glass_fill(p))),
+                button::Status::Pressed => Some(Background::Color(glass_strong(p))),
+                _ => None,
+            };
+            button::Style {
+                background: bg,
+                text_color,
+                border: Border { radius: radius(TARGET / 2.0), width: if glassy { 1.0 } else { 0.0 }, color: glass_rim(p) },
+                ..Default::default()
+            }
         })
         .into()
 }
@@ -240,19 +254,16 @@ fn chip<'a>(p: Palette, label: String, msg: Message, live: bool) -> Element<'a, 
 
 pub fn view(b: &Browser) -> Element<'_, Message> {
     let p = b.palette;
-    let mut panel = column![tab_strip(b), toolbar(b)];
+    // The classic layout: a full-width translucent bar holding the toolbar,
+    // then the tabs (and the find bar), with a specular line on top and a
+    // hairline below.
+    let mut bar = column![line(specular(p)), container(toolbar(b)).padding(Padding::from([0, 8])), container(tab_strip(b)).padding(Padding::from([0, 8]))];
     if b.find.is_some() {
-        panel = panel.push(find_bar(b));
+        bar = bar.push(container(find_bar(b)).padding(Padding::from([0, 8])));
     }
-    let glass_panel = container(panel).padding(Padding { top: 0.0, right: 8.0, bottom: 0.0, left: 8.0 }).style(move |_: &Theme| glass(p, 22.0));
-    let under = container(container(space()).width(Length::Fill).height(PANEL_MARGIN).style(move |_: &Theme| contact_shadow(p)))
-        .padding(Padding { top: 0.0, right: 24.0, bottom: 0.0, left: 24.0 });
-    let panel = column![
-        container(glass_panel).padding(Padding { top: PANEL_MARGIN, right: PANEL_MARGIN, bottom: 0.0, left: PANEL_MARGIN }),
-        under
-    ];
+    let bar = container(column![bar, line(alpha(p.outline_variant, 0.7))]).style(move |_: &Theme| glass_bar(p));
 
-    let main = column![panel, content(b)];
+    let main = column![bar, content(b)];
     let base = container(main).width(Length::Fill).height(Length::Fill).style(move |_: &Theme| backdrop(p));
 
     let chrome = CHROME_HEIGHT + if b.find.is_some() { FIND_HEIGHT } else { 0.0 };
@@ -265,8 +276,7 @@ pub fn view(b: &Browser) -> Element<'_, Message> {
         .into();
     }
     if let Some(c) = &b.context {
-        let top = chrome + c.at.y;
-        let left = c.at.x.min(b.view_width() as f32 - 270.0).max(8.0);
+        let (left, top, _, _) = popup_rect(b).unwrap_or((8.0, chrome, 0.0, 0.0));
         return stack![
             base,
             mouse_area(container(space()).width(Length::Fill).height(Length::Fill))
@@ -276,7 +286,66 @@ pub fn view(b: &Browser) -> Element<'_, Message> {
         ]
         .into();
     }
-    base.into()
+    match &b.toast {
+        Some((t, _)) => stack![base, toast(b, t)].into(),
+        None => base.into(),
+    }
+}
+
+/// A glass capsule at the bottom centre with a short message (refracting
+/// the page behind it).
+fn toast<'a>(b: &'a Browser, t: &str) -> Element<'a, Message> {
+    let p = b.palette;
+    let w = toast_width(t);
+    let label = container(text(t.to_string()).size(14).color(p.on_surface).wrapping(iced::widget::text::Wrapping::None)).width(w).height(TOAST_H).center(Length::Fixed(w));
+    let face: Element<'a, Message> = match &b.glass_bg {
+        Some(h) => stack![image(h.clone()).width(w).height(TOAST_H).content_fit(iced::ContentFit::Fill), label].into(),
+        None => container(label)
+            .style(move |_: &Theme| container::Style {
+                background: Some(Background::Color(alpha(p.surface_container, 0.96))),
+                border: Border { radius: radius(TOAST_H / 2.0), width: 1.0, color: glass_rim(p) },
+                ..Default::default()
+            })
+            .into(),
+    };
+    let pill = button(face).on_press(Message::DismissToast).padding(0).style(move |_: &Theme, _s| button::Style {
+        background: None,
+        border: Border { radius: radius(TOAST_H / 2.0), width: 1.0, color: glass_rim(p) },
+        shadow: shadow(8.0, 24.0, if p.dark { 0.45 } else { 0.18 }),
+        ..Default::default()
+    });
+    container(mouse_area(pill).on_move(Message::GlassPointer)).width(Length::Fill).height(Length::Fill).align_x(Alignment::Center).align_y(Alignment::End).padding(24).into()
+}
+
+/// The Z#++ playground: an editor, Run, the output and the canvas.
+fn playground(b: &Browser) -> Element<'_, Message> {
+    let p = b.palette;
+    let editor = iced::widget::text_editor(&b.zs_editor)
+        .on_action(Message::ZsEdit)
+        .height(Length::Fill)
+        .size(14)
+        .font(Font::MONOSPACE)
+        .padding(14);
+    let head = row![
+        column![text("Z#++ playground").size(28).font(HEAVY).color(p.on_surface), text(".zsp code · Canvas 2D · imports need files, so use one program here").size(13).color(p.on_surface_variant)].spacing(2),
+        space().width(Length::Fill),
+        button(text("Run").size(14)).on_press(Message::ZsRun).padding(Padding::from([10, 24])).style(filled(p)),
+    ]
+    .align_y(Alignment::Center);
+    let preview: Element<'_, Message> = match &b.zs_frame {
+        Some(h) => container(image(h.clone()).content_fit(iced::ContentFit::Contain)).width(Length::Fill).height(Length::Fill).center(Length::Fill).into(),
+        None => container(text("Draw on a canvas called `canvas` (or `screen`) to see it here.").size(13).color(p.on_surface_variant)).center(Length::Fill).into(),
+    };
+    let out = scrollable(text(b.zs_output.clone()).size(13).font(Font::MONOSPACE).color(p.on_surface)).height(Length::Fill);
+    let right = column![
+        container(preview).height(Length::FillPortion(3)).width(Length::Fill).padding(8).style(move |_: &Theme| card_style(p)),
+        container(out).height(Length::FillPortion(2)).width(Length::Fill).padding(14).style(move |_: &Theme| card_style(p)),
+    ]
+    .spacing(12);
+    let body = row![container(editor).width(Length::FillPortion(1)).height(Length::Fill).style(move |_: &Theme| card_style(p)), container(right).width(Length::FillPortion(1))]
+        .spacing(12)
+        .height(Length::Fill);
+    container(column![head, body].spacing(16)).padding(20).width(Length::Fill).height(Length::Fill).into()
 }
 
 fn tab_strip(b: &Browser) -> Element<'_, Message> {
@@ -311,12 +380,20 @@ fn tab_strip(b: &Browser) -> Element<'_, Message> {
             .height(32)
             .padding(Padding { top: 0.0, right: 5.0, bottom: 0.0, left: 12.0 })
             .align_y(Alignment::Center);
-        // The selected tab is raised (neumorphic); the others sit flat on the glass.
-        let pill = if active { pill.style(move |_: &Theme| raised(p, 16.0)) } else { pill };
+        // Liquid Glass: the selected tab is a glass pill with a rim.
+        let pill = if active {
+            pill.style(move |_: &Theme| container::Style {
+                background: Some(Background::Color(glass_strong(p))),
+                border: Border { radius: radius(16.0), width: 1.0, color: glass_rim(p) },
+                ..Default::default()
+            })
+        } else {
+            pill
+        };
         strip = strip.push(pill);
     }
     strip = strip.push(icon(p, "+", Some(Message::NewTab)));
-    container(strip).width(Length::Fill).height(TAB_ROW).align_y(Alignment::End).into()
+    container(strip).width(Length::Fill).height(TAB_ROW).align_y(Alignment::Center).into()
 }
 
 fn toolbar(b: &Browser) -> Element<'_, Message> {
@@ -347,12 +424,14 @@ fn toolbar(b: &Browser) -> Element<'_, Message> {
     if web {
         pill = pill.push(icon(p, if starred { "★" } else { "☆" }, Some(Message::ToggleBookmark)));
     }
-    // The address capsule is softly inset into the glass.
-    let pill = container(pill).width(Length::Fill).height(TARGET).align_y(Alignment::Center).style(move |_: &Theme| container::Style {
-        background: Some(Background::Color(alpha(p.surface_lowest, if p.dark { 0.55 } else { 0.65 }))),
-        border: Border { radius: radius(TARGET / 2.0), width: 1.0, color: alpha(p.outline_variant, 0.7) },
+    // Liquid Glass: the address field is a glass capsule with a rim and a
+    // specular line along its top.
+    let capsule = container(pill).width(Length::Fill).height(TARGET).align_y(Alignment::Center).style(move |_: &Theme| container::Style {
+        background: Some(Background::Color(glass_strong(p))),
+        border: Border { radius: radius(TARGET / 2.0), width: 1.0, color: glass_rim(p) },
         ..Default::default()
     });
+    let pill = stack![capsule, container(line(specular(p))).padding(Padding { top: 1.0, right: TARGET / 2.0, bottom: 0.0, left: TARGET / 2.0 })];
 
     let mut right = row![].spacing(6).align_y(Alignment::Center);
     let zoom = page.map(|x| x.zoom()).unwrap_or(1.0);
@@ -413,8 +492,93 @@ fn find_bar(b: &Browser) -> Element<'_, Message> {
 
 // ── Menus ────────────────────────────────────────────────────────────
 
-fn popup<'a>(p: Palette, content: impl Into<Element<'a, Message>>, width: f32) -> Element<'a, Message> {
-    container(content).padding(8).width(width).style(move |_: &Theme| popup_style(p)).into()
+// ── Liquid Glass popups ──────────────────────────────────────────────
+
+pub const MENU_W: f32 = 288.0;
+pub const CTX_W: f32 = 262.0;
+
+/// Popup height for `rows` 40 px items and `dividers` (9 px), with 2 px
+/// spacing and 8 px padding: fixed, so the glass behind lines up exactly.
+pub fn popup_height(rows: usize, dividers: usize) -> f32 {
+    16.0 + rows as f32 * 40.0 + dividers as f32 * 9.0 + (rows + dividers).saturating_sub(1) as f32 * 2.0
+}
+
+fn context_rows(c: &crate::ContextMenu) -> (usize, usize) {
+    let (mut r, mut d) = (5, 1);
+    if !c.link.is_empty() {
+        r += 3;
+        d += 1;
+    }
+    if !c.image.is_empty() {
+        r += 3;
+        d += 1;
+    }
+    if !c.selection.trim().is_empty() {
+        r += 1;
+        d += 1;
+    }
+    (r, d)
+}
+
+/// Extensions with a panel (`panel.slint`) or a page (`extra.html`).
+fn ext_entries(b: &Browser) -> impl Iterator<Item = &stonedgem_extensions::registry::Entry> {
+    b.extensions.iter().filter(|e| e.enabled && (e.has_slint_panel || e.has_page))
+}
+
+/// The main menu's rows and dividers.
+pub fn menu_rows(b: &Browser) -> (usize, usize) {
+    let n = ext_entries(b).count();
+    (9 + n, if n > 0 { 3 } else { 2 })
+}
+
+/// Where the open popup sits in the window (x, y, w, h), if one is open.
+pub fn popup_rect(b: &Browser) -> Option<(f32, f32, f32, f32)> {
+    let chrome = CHROME_HEIGHT + if b.find.is_some() { FIND_HEIGHT } else { 0.0 };
+    if b.menu {
+        let (r, d) = menu_rows(b);
+        return Some((b.window_width() as f32 - 16.0 - MENU_W, chrome - 10.0, MENU_W, popup_height(r, d)));
+    }
+    if let Some(c) = &b.context {
+        let (r, d) = context_rows(c);
+        let h = popup_height(r, d);
+        let left = c.at.x.min(b.view_width() as f32 - CTX_W - 8.0).max(8.0);
+        // Keep it inside the window: open upwards if there isn't room below.
+        let top = (chrome + c.at.y).min(b.window_height() as f32 - h - 8.0).max(chrome);
+        return Some((left, top, CTX_W, h));
+    }
+    if let Some((t, _)) = &b.toast {
+        let w = toast_width(t);
+        return Some(((b.window_width() as f32 - w) / 2.0, b.window_height() as f32 - 24.0 - TOAST_H, w, TOAST_H));
+    }
+    None
+}
+
+const TOAST_H: f32 = 42.0;
+fn toast_width(t: &str) -> f32 {
+    (t.chars().count() as f32 * 7.6 + 40.0).clamp(120.0, 640.0)
+}
+
+/// The popup frame: refracting glass (when the page is behind it) with a
+/// light rim, or the plain popup sheet.
+fn popup<'a>(b: &'a Browser, content: impl Into<Element<'a, Message>>, width: f32, height: f32) -> Element<'a, Message> {
+    let p = b.palette;
+    let rim = move |_: &Theme| container::Style {
+        border: Border { radius: radius(20.0), width: 1.0, color: glass_rim(p) },
+        shadow: shadow(16.0, 40.0, if p.dark { 0.45 } else { 0.18 }),
+        ..Default::default()
+    };
+    let body: Element<'a, Message> = match &b.glass_bg {
+        Some(h) => stack![
+            image(h.clone()).width(width).height(height).content_fit(iced::ContentFit::Fill),
+            container(content).padding(8).width(width).height(height).style(move |_: &Theme| container::Style {
+                border: Border { radius: radius(20.0), width: 1.0, color: glass_rim(p) },
+                ..Default::default()
+            })
+        ]
+        .into(),
+        None => container(content).padding(8).width(width).height(height).style(move |_: &Theme| popup_style(p)).into(),
+    };
+    mouse_area(container(body).style(rim)).on_move(Message::GlassPointer).into()
 }
 
 fn menu_item<'a>(p: Palette, label: &'a str, keys: &'a str, msg: Option<Message>) -> Element<'a, Message> {
@@ -454,6 +618,7 @@ fn menu(b: &Browser) -> Element<'_, Message> {
         icon(p, "+", page.map(|_| Message::Zoom(1))),
     ]
     .align_y(Alignment::Center)
+    .height(40)
     .padding(Padding { top: 0.0, right: 0.0, bottom: 0.0, left: 14.0 });
     let list = column![
         menu_item(p, "New tab", "Ctrl+T", Some(Message::NewTab)),
@@ -464,11 +629,28 @@ fn menu(b: &Browser) -> Element<'_, Message> {
         menu_item(p, "Bookmarks", "Ctrl+Shift+O", Some(Message::Open(Internal::Bookmarks))),
         menu_item(p, "Downloads", "Ctrl+J", Some(Message::Open(Internal::Downloads))),
         menu_item(p, "Settings", "Ctrl+,", Some(Message::Open(Internal::Settings))),
+        menu_item(p, "Z#++ playground", "", Some(Message::Open(Internal::Zsharp))),
         menu_divider(p),
-        menu_item(p, "Quit", "", Some(Message::Quit)),
     ]
     .spacing(2);
-    popup(p, list, 288.0)
+    let mut list = list;
+    let mut any = false;
+    for e in ext_entries(b) {
+        any = true;
+        let (hint, msg) = if e.has_slint_panel {
+            let open = b.panel.as_ref().is_some_and(|x| x.ext == e.id);
+            (if open { "Panel ✓" } else { "Panel" }, if open { Message::ClosePanel } else { Message::OpenPanel(e.id.clone()) })
+        } else {
+            ("Page", Message::OpenExtPage(e.id.clone()))
+        };
+        list = list.push(menu_item(p, &e.name, hint, Some(msg)));
+    }
+    if any {
+        list = list.push(menu_divider(p));
+    }
+    let list = list.push(menu_item(p, "Quit", "", Some(Message::Quit)));
+    let (r, d) = menu_rows(b);
+    popup(b, list, MENU_W, popup_height(r, d))
 }
 
 fn context_menu<'a>(b: &'a Browser, c: &'a crate::ContextMenu) -> Element<'a, Message> {
@@ -499,12 +681,48 @@ fn context_menu<'a>(b: &'a Browser, c: &'a crate::ContextMenu) -> Element<'a, Me
         .push(menu_divider(p))
         .push(menu_item(p, "Bookmark this page", "Ctrl+D", Some(Message::ToggleBookmark)))
         .push(menu_item(p, "Find in page", "Ctrl+F", Some(Message::FindOpen)));
-    popup(p, list, 262.0)
+    let (r, d) = context_rows(c);
+    popup(b, list, CTX_W, popup_height(r, d))
 }
 
 // ── Content ──────────────────────────────────────────────────────────
 
 fn content(b: &Browser) -> Element<'_, Message> {
+    match &b.panel {
+        Some(panel) => row![page_area(b), side_panel(b, panel)].into(),
+        None => page_area(b),
+    }
+}
+
+/// An extension's Slint panel beside the page: a glass column with the
+/// extension's name and a close button above what the panel draws.
+fn side_panel<'a>(b: &'a Browser, panel: &'a stonedgem_chrome::panels::Panel) -> Element<'a, Message> {
+    let p = b.palette;
+    let head = row![
+        text(panel.title.as_str()).size(14).font(BOLD).color(p.on_surface),
+        space().width(Length::Fill),
+        icon(p, "✕", Some(Message::ClosePanel)),
+    ]
+    .align_y(Alignment::Center)
+    .height(crate::PANEL_HEAD)
+    .padding(Padding { top: 0.0, right: 4.0, bottom: 0.0, left: 16.0 });
+    let body: Element<'a, Message> = match &b.panel_frame {
+        Some(h) => image(h.clone()).width(Length::Fill).height(Length::Fill).content_fit(iced::ContentFit::None).into(),
+        None => space().width(Length::Fill).height(Length::Fill).into(),
+    };
+    let body = mouse_area(container(body).width(Length::Fill).height(Length::Fill).align_top(Length::Fill))
+        .on_move(Message::PanelMoved)
+        .on_press(Message::PanelPressed)
+        .on_release(Message::PanelReleased)
+        .on_scroll(Message::PanelScrolled);
+    row![
+        container(space()).width(1).height(Length::Fill).style(move |_: &Theme| container::Style { background: Some(Background::Color(alpha(p.outline_variant, 0.7))), ..Default::default() }),
+        container(column![head, line(alpha(p.outline_variant, 0.5)), body]).width(crate::PANEL_W - 1.0).height(Length::Fill).style(move |_: &Theme| glass_bar(p)),
+    ]
+    .into()
+}
+
+fn page_area(b: &Browser) -> Element<'_, Message> {
     let Some(t) = b.tab() else { return space().into() };
     match &t.content {
         Content::Web(_) => {
@@ -525,6 +743,7 @@ fn content(b: &Browser) -> Element<'_, Message> {
                 Internal::Bookmarks => bookmarks(b),
                 Internal::Downloads => downloads(b),
                 Internal::Settings => settings(b),
+                Internal::Zsharp => return playground(b),
             };
             scrollable(container(container(body).max_width(760)).width(Length::Fill).align_x(Alignment::Center).padding(Padding::from([24, 24])))
                 .width(Length::Fill)
@@ -726,7 +945,10 @@ fn settings(b: &Browser) -> Element<'_, Message> {
         ext = ext.push(text("No extensions yet. Add an unpacked .oynix folder below.").size(14).color(p.on_surface_variant));
     }
     for e in &b.extensions {
-        let note = if e.kind == "oynix" { format!("{} · {}", e.version, if e.matches.is_empty() { "no pages".to_string() } else { e.matches.join(", ") }) } else { format!("{} · needs WebExtensions (not in this preview)", e.version) };
+        let mut note = if e.kind == "oynix" { format!("{} · {}", e.version, if e.matches.is_empty() { "no pages".to_string() } else { e.matches.join(", ") }) } else { format!("{} · needs WebExtensions (not in this preview)", e.version) };
+        if e.has_script {
+            note.push_str(" · Z#++ script");
+        }
         ext = ext.push(
             row![
                 column![text(e.name.clone()).size(15).color(p.on_surface), text(note).size(12).color(p.on_surface_variant).wrapping(iced::widget::text::Wrapping::None)].spacing(2).width(Length::Fill),
@@ -751,6 +973,9 @@ fn settings(b: &Browser) -> Element<'_, Message> {
     );
     if !b.ext_message.is_empty() {
         ext = ext.push(text(b.ext_message.clone()).size(13).color(p.on_surface_variant));
+    }
+    for err in &b.zs.errors {
+        ext = ext.push(text(format!("Script not loaded: {err}")).size(13).color(p.error));
     }
 
     column![

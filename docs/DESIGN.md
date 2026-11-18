@@ -1,45 +1,55 @@
-# StonedGem / OyNIx 5.4 design
+# StonedGem / OyNIx 5.4 design: the classic layout, in Liquid Glass
 
-One look for the Iced window (`stonedgem-chrome`) and OyNIx 5.4's QML UI.
-It borrows from four references and keeps what works on a desktop browser:
+One look for the Iced window (`stonedgem-chrome`) and OyNIx 5.4's QML UI:
+OyNIx's familiar layout (a full-width toolbar, the tab row, the page),
+with Liquid Glass materials on the controls. No gradient backdrops.
 
 | Source | What we take |
 |---|---|
-| Material 3 | Colour **roles** from one accent (`stonedgem-theme`), the shape scale, the type scale, state layers (hover 8 %, pressed 12 %), tonal buttons. |
-| Liquid Glass | A **layer split**: content at the back, controls on a translucent panel floating above it, with a backdrop that has something to show through (a soft gradient), a hairline highlight and a soft shadow. Glass is for controls only — never content, never glass on glass. Tint only where colour means something (live downloads, blocked count, zoom ≠ 100 %). |
-| Neumorphism | Used **sparingly**: the selected tab and cards are softly *raised* (shadow + highlight edge); the address field is softly *inset*. Never for low-contrast text or as the only sign of state. |
-| Apple design tips | Click targets ≥ 40 px (toolbar buttons 40×40, rows ≥ 44), 8-point spacing, clear hierarchy (one large title per page), text contrast ≥ 4.5:1, labels on icon-only controls in tooltips/menus. |
+| OyNIx 5.3 | The **layout**: toolbar across the top (navigation, address field, actions), tabs below it, the page below that; start page, popovers and cards where they were. |
+| Liquid Glass | The **material**: controls are glass — translucent, with a light rim and a bright specular line along the top edge. Glass is for controls only (never content, never glass on glass). Controls that aren't in use stay clear and turn to glass under the pointer; the address field and the selected tab are glass at rest. Tint only where colour means something (live downloads, blocked count, zoom ≠ 100 %, the checked state). |
+| Material 3 | Colour **roles** from one accent (`stonedgem-theme`), the shape and type scales, state layers, filled/tonal buttons. |
+| Apple design tips | Click targets ≥ 40 px, 8-point spacing, one large title per page, text contrast ≥ 4.5:1, labels for icon-only controls. |
 
 ## Tokens
 
-- **Spacing:** 4, 8, 12, 16, 24, 32.
-- **Shape:** 8 (small), 12 (menu items), 16 (fields inside cards), 20 (popups),
-  22 (the floating panel), 24 (cards), full (capsules: tabs, address, buttons).
-- **Type:** 34 bold (page title), 20 semibold (section), 15 (body), 13 (secondary),
-  12 (labels, shortcuts).
-- **Backdrop:** a linear gradient from the surface toward the primary (≈16 %)
-  at the top-left and the tertiary (≈10 %) at the bottom-right.
-- **Glass panel:** surface-container-high at ≈72 % (dark) / 74 % (light),
-  1 px highlight edge (white 10 % dark / 70 % light), and a soft contact
-  shadow in the gap below it.
-- **Raised (neumorphic):** a lighter tone than its surroundings and a light edge.
+- **Glass fill** (controls in use): surface-container-highest at 55 % (dark) / 62 % (light).
+- **Strong glass** (legible at rest: address field, selected tab): 78 % / 86 %.
+- **Rim:** white 14 % (dark) / outline-variant 65 % (light), 1 px.
+- **Specular line:** white 20 % (dark) / 95 % (light), 1 px along the top edge.
+- **Glass bar** (toolbar + tabs): surface-container at 88 % / 86 %, specular
+  line on top, hairline (outline-variant 70 %) below.
+- **Popups:** surface-container at 94–96 %, rim; menus keep a soft shadow.
+- **Backdrop:** the plain surface colour. No gradients.
+- **Spacing:** 4, 8, 12, 16, 24, 32. **Shape:** 12 (menu items), 16 (tabs),
+  20 (popups), 24 (cards), full (capsules). **Type:** 34 bold (page title),
+  20 semibold (section), 15 (body), 13 (secondary), 12 (labels).
 
-- **Inset:** surface-container-lowest at 55 %, 1 px outline-variant edge.
-- **Popups:** surface-container at 94 %, highlight edge, shadow 0 16 40 at 45 %.
+### Dynamic refraction
 
-In the Iced window, shadows are kept to popups (menus). Iced's CPU
-renderer repaints drop shadows over neighbouring content when it redraws
-part of the window, so the panel's shadow is a gradient strip, and cards
-and the selected tab are raised by tone and edge. OyNIx (Qt Quick) uses a
-real blurred shadow under its panel.
+Glass that floats over the page — menus, popovers, the right-click menu,
+notifications — is real Liquid Glass: it shows the live page behind it,
+frosted and tinted, bent inward near its rounded rim like a lens (with a
+little colour dispersion), with a specular rim lit from the pointer's
+position, so the highlight moves as the pointer does. Both apps use the
+same model: OyNIx as a Qt Quick shader (`assets/shaders/liquidglass.frag`
+there, over a live capture of the window), the Iced window on the CPU from
+Servo's page frames (`stonedgem_chrome::glass`). The tint stays strong
+enough for text on the glass to keep 4.5:1 contrast over busy pages.
+Bars (toolbar, tabs) keep the glass material without refraction: nothing
+is drawn behind them.
+
+In the Iced window, shadows are kept to popups: Iced's CPU renderer
+repaints drop shadows over neighbouring content when it redraws part of
+the window, so glass there is defined by fill, rim and specular line.
 
 ## Layout (browser window)
 
 ```
-╭──────────────────── glass panel (8 px from the window edges) ─────────────────────╮
-│  ( Tab ●)  ( Tab )  ( Tab )   +                                                    │
-│  ←  →  ↻  ⌂   (  StonedGem │ address …                    ☆ )  125%  3 blocked  ⇩ ⋮ │
-│  [ find … ]  3 of 58  ↑ ↓                                              ✕  (when open)│
-╰────────────────────────────────────────────────────────────────────────────────────╯
- page (edge to edge)  ·  or History / Bookmarks / Downloads / Settings on the backdrop
+─────────────────────────────── specular line ───────────────────────────────
+ ←  →  ↻  ⌂   ( StonedGem │ address …                       ☆ )  125%  ⇩  ⋮
+ ( Tab ● ✕ )  ( Tab ✕ )  ( Tab ✕ )  +
+ [ find … ]  3 of 58  ↑ ↓                                              ✕
+──────────────────────────────── hairline ──────────────────────────────────
+ page (edge to edge)  ·  or History / Bookmarks / Downloads / Settings
 ```

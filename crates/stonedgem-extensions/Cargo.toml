@@ -18,3 +18,4 @@ pulldown-cmark = { version = "0.13.6", default-features = false, features = ["ht
 stonedgem-profile = { path = "../stonedgem-profile" }
 stonedgem-poweroynix = { path = "../stonedgem-poweroynix" }
 stonedgem-theme = { path = "../stonedgem-theme" }
+stonedgem-zsharp = { path = "../stonedgem-zsharp" }

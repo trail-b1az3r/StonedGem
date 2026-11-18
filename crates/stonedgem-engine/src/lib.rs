@@ -88,6 +88,23 @@ fn resource_type(d: content_security_policy::Destination, main_frame: bool) -> i
     }
 }
 
+/// The request-type names `network.ts` sees (OyNIx's).
+fn type_name(t: i32) -> &'static str {
+    match t {
+        0 => "main_frame",
+        1 => "sub_frame",
+        2 => "stylesheet",
+        3 => "script",
+        4 => "image",
+        5 => "font",
+        7 => "object",
+        8 => "media",
+        13 => "xmlhttprequest",
+        14 => "csp_report",
+        _ => "other",
+    }
+}
+
 #[derive(Clone)]
 struct Waker;
 impl EventLoopWaker for Waker {
@@ -119,7 +136,10 @@ impl WebViewDelegate for Delegate {
             webview.url().map(|u| u.to_string()).unwrap_or_default()
         };
         let kind = resource_type(req.destination, req.is_for_main_frame);
-        if stonedgem_blocker::blocker::should_block(&url, &first_party, kind) {
+        let blocked = stonedgem_blocker::blocker::should_block(&url, &first_party, kind);
+        // Power extensions' `network.ts` onRequest feed (a no-op unless one listens).
+        stonedgem_blocker::netrules::observe(&url, &first_party, req.method.as_str(), type_name(kind), blocked);
+        if blocked {
             self.0.blocked.borrow_mut().push(url);
             if let Ok(u) = url::Url::parse(req.url.as_str()) {
                 // Fail the load like a network error: no body reaches the page.

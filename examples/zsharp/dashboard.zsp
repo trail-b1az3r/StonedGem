@@ -1,0 +1,19 @@
+// A small dashboard drawn with Z#++: imports a header and GPU code.
+import "ui.zsx"
+import "aurora.zsg"
+
+func draw_card(c: Canvas, card: Card, x: int, y: int) {
+    c.round_rect(x, y, 150, 70, 16, rgba(255, 255, 255, 0.10))
+    c.text(x + 14, y + 14, card.title, 10, #c9d6ff)
+    c.text(x + 14, y + 36, str(card.value), 21, #ffffff)
+}
+
+func Main() {
+    global let screen = Canvas(520, 200)
+    screen.shade(aurora, 0, 0, 520, 200, { time: 1.5 })
+    let cards = [Card { title: "Tabs", value: 12 }, Card { title: "Blocked", value: 341 }, Card { title: "Saved", value: 27 }]
+    for i, card in cards { draw_card(screen, card, 20 + i * 165, 110) }
+    screen.text(22, 22, "StonedGem", 21, #ffffff)
+    let levels = normalize.run({ xs: [3, 8, 13] }, { lo: 3, hi: 13 })
+    Printl("levels: ${levels.xs}")
+}

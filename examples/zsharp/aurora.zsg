@@ -1,0 +1,22 @@
+// GPU code: a soft aurora, as a fragment shader (and a compute kernel).
+const BANDS = 3
+
+func band(y: float, center: float, width: float) -> float {
+    return smoothstep(width, 0.0, abs(y - center))
+}
+
+fragment aurora(uv: vec2, uniform time: float) -> color {
+    var c = vec3(0.04, 0.05, 0.09)
+    for i in 0..BANDS {
+        let fi = float(i)
+        let center = 0.35 + 0.12 * fi + 0.05 * sin(uv.x * 6.0 + time + fi)
+        let tint = mix(vec3(0.18, 0.49, 0.96), vec3(0.45, 0.95, 0.75), fi / 2.0)
+        c += tint * band(uv.y, center, 0.09) * 0.7
+    }
+    return vec4(c, 1.0)
+}
+
+// General-purpose GPU work: normalise a list of numbers to 0..1.
+kernel normalize(buf xs: [float], uniform lo: float, uniform hi: float) {
+    xs[gid] = clamp((xs[gid] - lo) / (hi - lo), 0.0, 1.0)
+}

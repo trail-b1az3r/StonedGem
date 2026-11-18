@@ -1,0 +1,9 @@
+// Draws the start page's hero art with Z#++ (2D canvas + .zsg shader).
+import "start.zsg"
+
+func Main() {
+    // Small: the page stretches it (it's a soft gradient), and it's
+    // rendered on the CPU once, then cached.
+    global let canvas = Canvas(320, 80)
+    canvas.shade(hero, 0, 0, 320, 80, { seed: 1.3 })
+}

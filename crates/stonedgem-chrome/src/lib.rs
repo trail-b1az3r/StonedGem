@@ -5,19 +5,54 @@
 use iced::keyboard::{key::Named, Key as IcedKey, Modifiers};
 use stonedgem_engine::Key;
 
+pub mod bridge;
 pub mod downloads;
+pub mod exthub;
 pub mod find;
+pub mod glass;
 pub mod palette;
+pub mod panels;
 pub mod session;
 pub mod settings;
+pub mod zs_hooks;
 
 /// The page a new tab opens, titled with the product's name.
 pub fn start_page(product: &str) -> String {
+    start_page_with(product, &[])
+}
+
+/// The theme extension widgets are drawn with (the start page's colours).
+pub const WIDGET_THEME: &str = ":root{color-scheme:dark;--fg:#d8dee6;--muted:#8a96a3;--accent:#8fb4ff;--on-accent:#0b1a33;--field:#1c2229;--font:sans-serif}";
+
+/// The start page with extension widgets (`widget.tsx`): each `(name,
+/// html)` is a card holding the widget's page in a sandboxed frame.
+pub fn start_page_with(product: &str, widgets: &[(String, String)]) -> String {
+    // The banner is drawn by Z#++ (assets/start.zsp + start.zsg).
+    let hero = zs_hooks::hero_data_url();
+    let attr = |s: &str| s.replace('&', "&amp;").replace('"', "&quot;").replace('<', "&lt;");
+    let mut cards = String::new();
+    if !widgets.is_empty() {
+        cards.push_str("<div class=widgets>");
+        for (name, html) in widgets {
+            cards.push_str(&format!(
+                "<section class=card><h2>{}</h2><iframe sandbox=allow-scripts srcdoc=\"{}\"></iframe></section>",
+                attr(name),
+                attr(html)
+            ));
+        }
+        cards.push_str("</div>");
+    }
+    // In a data: URL, `%` and `#` must be escaped, and line breaks too
+    // (URL parsing drops raw ones, which would join script lines).
+    let cards = cards.replace('%', "%25").replace('#', "%23").replace('\n', "%0A").replace('\r', "%0D").replace('\t', "%09");
     format!(
         "data:text/html;charset=utf-8,<!DOCTYPE html><title>New tab</title>\
-<style>body{{font:16px sans-serif;background:%23101418;color:%23d8dee6;display:grid;place-items:center;height:90vh;margin:0}}\
-h1{{font-weight:300;letter-spacing:.06em}}p{{color:%238a96a3}}</style>\
-<div><h1>{}</h1><p>Type an address or a search in the bar above.</p></div>",
+<style>body{{font:16px sans-serif;background:%23101418;color:%23d8dee6;margin:0;min-height:100vh}}\
+.hero{{height:240px;background:%23101418 url({hero}) center/cover no-repeat;display:flex;align-items:flex-end;padding:0 48px 28px}}\
+h1{{font-weight:300;letter-spacing:.06em;font-size:42px;margin:0}}p{{color:%238a96a3;margin:24px 48px}}\
+.widgets{{display:flex;flex-wrap:wrap;gap:16px;margin:0 48px}}.card{{width:300px;background:%231c2229;border:1px solid %23ffffff1f;border-radius:24px;overflow:hidden}}\
+.card h2{{font-size:13px;font-weight:600;color:%238a96a3;margin:12px 16px 0}}.card iframe{{border:0;width:100%25;height:160px;display:block}}</style>\
+<div class=hero><h1>{}</h1></div><p>Type an address or a search in the bar above.</p>{cards}",
         product.replace('<', "").replace('%', "%25").replace('#', "%23")
     )
 }
@@ -53,10 +88,12 @@ pub enum Internal {
     Bookmarks,
     Downloads,
     Settings,
+    /// The Z#++ playground.
+    Zsharp,
 }
 
 impl Internal {
-    pub const ALL: [Internal; 4] = [Internal::History, Internal::Bookmarks, Internal::Downloads, Internal::Settings];
+    pub const ALL: [Internal; 5] = [Internal::History, Internal::Bookmarks, Internal::Downloads, Internal::Settings, Internal::Zsharp];
 
     pub fn address(self) -> &'static str {
         match self {
@@ -64,6 +101,7 @@ impl Internal {
             Internal::Bookmarks => "stonedgem://bookmarks",
             Internal::Downloads => "stonedgem://downloads",
             Internal::Settings => "stonedgem://settings",
+            Internal::Zsharp => "stonedgem://zsharp",
         }
     }
 
@@ -73,15 +111,17 @@ impl Internal {
             Internal::Bookmarks => "Bookmarks",
             Internal::Downloads => "Downloads",
             Internal::Settings => "Settings",
+            Internal::Zsharp => "Z#++",
         }
     }
 
     /// The internal page typed text names, e.g. `stonedgem://history` or `about:settings`.
     pub fn from_address(text: &str) -> Option<Internal> {
         let t = text.trim().to_ascii_lowercase();
-        let name = t.strip_prefix("stonedgem://").or_else(|| t.strip_prefix("about:"))?;
-        Internal::ALL.into_iter().find(|i| i.title().eq_ignore_ascii_case(name.trim_end_matches('/')))
+        let name = t.strip_prefix("stonedgem://").or_else(|| t.strip_prefix("about:"))?.trim_end_matches('/').to_string();
+        Internal::ALL.into_iter().find(|i| i.address().trim_start_matches("stonedgem://") == name)
     }
+
 }
 
 /// What a tab shows in the tab strip.

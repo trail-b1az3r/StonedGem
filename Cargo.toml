@@ -14,6 +14,7 @@ default-members = [
     "crates/stonedgem-library",
     "crates/stonedgem-extensions",
     "crates/stonedgem-theme",
+    "crates/stonedgem-zsharp",
 ]
 
 [workspace.package]
@@ -36,4 +37,9 @@ sha3 = "0.10"
 # while our own crates still compile quickly.
 [profile.dev.package."*"]
 debug = false
+opt-level = 2
+
+# The window's own CPU work (glass refraction, page-frame readback) needs
+# optimising even in debug builds to keep up with the pointer.
+[profile.dev.package.stonedgem-chrome]
 opt-level = 2
