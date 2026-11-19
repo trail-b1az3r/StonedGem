@@ -73,3 +73,28 @@ fn bad_graphs_say_why() {
     let e = generate(&looped).unwrap_err();
     assert!(e.contains("loop"), "{e}");
 }
+
+#[test]
+fn the_studio_runs_without_an_extension_runtime() {
+    // What OyNIx does: the browser runs the bundled script itself.
+    let root = std::env::temp_dir().join(format!("stonedgem-studio-host-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::env::set_var("XDG_DATA_HOME", root.join("data"));
+    let graph: Json = serde_json::from_str(include_str!("../themes/neubrutalism/graph.json")).unwrap();
+    let mut s = stonedgem_hypertheme::studio::Studio::new().unwrap();
+    let (r, ev) = s.message(serde_json::json!({ "kind": "compile", "graph": graph, "dark": true }));
+    let r = r.unwrap();
+    assert!(ev.is_empty());
+    assert!(r["css"].as_str().unwrap().contains("--ht-background: #18181b"), "dark preview");
+    assert_eq!(r["values"]["on_pink"], "#111111");
+    let (r, _) = s.message(serde_json::json!({ "kind": "shader", "code": "fragment preview(uv: vec2) -> color { return vec4(uv.x, 0.0, 0.0, 1.0) }" }));
+    assert!(r.unwrap()["image"].as_str().unwrap().starts_with("data:image/png;base64,iVBOR"));
+    let (r, ev) = s.message(serde_json::json!({ "kind": "apply", "graph": graph }));
+    assert_eq!(r.unwrap()["file"], "neubrutalism.hypertheme");
+    assert_eq!(ev, vec![
+        stonedgem_hypertheme::studio::Event::Apply("neubrutalism.hypertheme".into()),
+        stonedgem_hypertheme::studio::Event::Notify("Theme Studio: using Neubrutalism".into()),
+    ]);
+    assert!(root.join("data/stonedgem/default/hyperthemes/neubrutalism.hypertheme").is_file());
+    let _ = std::fs::remove_dir_all(&root);
+}
