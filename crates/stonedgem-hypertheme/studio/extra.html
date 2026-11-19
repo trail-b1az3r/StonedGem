@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Theme Studio</title>
+<style id="preview-css"></style>
+<style>
+/* The editor's own look (the theme being made only styles the preview). */
+:root {
+  --ed-bg: #0f1012; --ed-grid: #1b1d21; --ed-panel: #17181b; --ed-raise: #202226; --ed-line: #2c2f35;
+  --ed-text: #e7e8ea; --ed-dim: #9095a0; --ed-sel: #7aa2ff; --ed-bad: #ff7a7a;
+  --t-color: #f2b84b; --t-number: #6fc3df; --t-font: #c792ea; --t-shader: #7ee787; --t-panel: #ff8fb1;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--ed-bg); color: var(--ed-text); font: 13px/1.4 system-ui, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: var(--ed-raise); border: 1px solid var(--ed-line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+button:hover { border-color: #444851; }
+button.primary { background: var(--ed-sel); color: #0b1020; border-color: transparent; font-weight: 600; }
+input, select, textarea { background: #0c0d0f; border: 1px solid var(--ed-line); border-radius: 5px; padding: 4px 6px; width: 100%; }
+textarea { font: 12px/1.45 ui-monospace, "JetBrains Mono", Menlo, monospace; resize: vertical; }
+
+#app { display: grid; grid-template: 44px 1fr / 168px 1fr 340px; height: 100vh; }
+header { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--ed-line); background: var(--ed-panel); }
+header h1 { font-size: 14px; margin: 0 10px 0 0; font-weight: 600; letter-spacing: .02em; }
+header .grow { flex: 1; }
+header #status { color: var(--ed-dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; }
+header label { display: flex; align-items: center; gap: 6px; color: var(--ed-dim); }
+header label input { width: auto; }
+
+#palette { border-right: 1px solid var(--ed-line); background: var(--ed-panel); padding: 10px; overflow: auto; }
+#palette h2, #side h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ed-dim); margin: 6px 0 8px; font-weight: 600; }
+#palette button { display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 5px; text-align: left; }
+#palette button i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+
+#board { position: relative; overflow: hidden; cursor: grab;
+  background-color: var(--ed-bg);
+  background-image: radial-gradient(var(--ed-grid) 1.2px, transparent 1.2px);
+  background-size: 22px 22px; }
+#board.panning { cursor: grabbing; }
+#world { position: absolute; left: 0; top: 0; z-index: 1; }
+
+.node { position: absolute; z-index: 1; width: 196px; background: var(--ed-panel); border: 1px solid var(--ed-line); border-radius: 9px; box-shadow: 0 6px 18px #0007; user-select: none; }
+.node.sel { border-color: var(--ed-sel); box-shadow: 0 0 0 1px var(--ed-sel), 0 6px 18px #0007; }
+.node .head { display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-bottom: 1px solid var(--ed-line); cursor: move; border-radius: 9px 9px 0 0; }
+.node .head b { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node .head small { color: var(--ed-dim); }
+.node .sw { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #fff3; flex: none; }
+.node .thumb { display: block; width: 100%; border-top: 1px solid var(--ed-line); image-rendering: pixelated; }
+.node .ports { padding: 4px 0; }
+.port { position: relative; display: flex; align-items: center; height: 20px; padding: 0 12px; color: var(--ed-dim); font-size: 12px; }
+.port.out { justify-content: flex-end; color: var(--ed-text); }
+.port .dot { position: absolute; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--ed-panel); top: 4px; cursor: crosshair; }
+.port.in .dot { left: -6px; }
+.port.out .dot { right: -6px; }
+.port .dot:hover, .port .dot.ok { transform: scale(1.35); }
+.port.in.wired { color: var(--ed-text); }
+
+#side { border-left: 1px solid var(--ed-line); background: var(--ed-panel); display: flex; flex-direction: column; min-height: 0; }
+#side section { padding: 10px 12px; border-bottom: 1px solid var(--ed-line); }
+#inspector { overflow: auto; flex: 1 1 40%; min-height: 0; }
+#inspector .field { margin-bottom: 9px; }
+#inspector .field span { display: block; color: var(--ed-dim); font-size: 11.5px; margin-bottom: 3px; }
+#inspector .row { display: flex; gap: 6px; }
+#inspector .row input[type=color] { width: 40px; padding: 1px; height: 28px; }
+#inspector img { width: 100%; border-radius: 6px; border: 1px solid var(--ed-line); margin-top: 6px; image-rendering: pixelated; }
+#inspector .hint { color: var(--ed-dim); }
+#warnings { color: var(--ed-bad); font-size: 12px; }
+#warnings:empty { display: none; }
+
+/* The live preview: a small browser, drawn with the theme's own classes. */
+#preview-wrap { flex: 0 0 auto; }
+#preview { border-radius: 8px; overflow: hidden; border: 1px solid var(--ed-line); background: var(--ht-background, #fff); color: var(--ht-text, #000);
+  font-family: var(--ht-font-family, system-ui), sans-serif; font-weight: var(--ht-font-weight, 400); }
+#preview .bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border-radius: 0 !important; border-width: 0 0 var(--ht-border-width, 1px) 0 !important; box-shadow: none !important; }
+#preview .tab { padding: 4px 10px; font-size: 12px; box-shadow: none !important; }
+#preview .tab.dim { background: transparent; border-color: transparent; }
+#preview .addr { display: flex; gap: 6px; width: 100%; }
+#preview .addr span { flex: 1; padding: 4px 10px; font-size: 12px; }
+#preview .addr b { padding: 4px 10px; font-size: 12px; }
+#preview .page { position: relative; padding: 14px; min-height: 176px; background-size: cover; background-position: center; }
+#preview .card { padding: 12px; max-width: 200px; }
+#preview .card h3 { margin: 0 0 4px; font-size: 16px; }
+#preview .card p { margin: 0 0 10px; font-size: 12px; color: var(--ht-muted); }
+#preview .card .go { display: inline-block; padding: 5px 12px; font-size: 12px; }
+#preview .card .no { display: inline-block; margin-left: 6px; color: var(--ht-danger); font-size: 12px; }
+#preview .popup { position: absolute; right: 12px; top: 12px; width: 112px; padding: 6px; font-size: 12px; }
+#preview .popup div { padding: 3px 6px; }
+#preview .popup div:first-child { background: var(--ht-accent); color: var(--ht-on-accent); border-radius: calc(var(--ht-radius) / 2); }
+
+#parts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+#parts button { font-size: 11px; padding: 2px 7px; }
+#code { display: none; position: fixed; inset: 60px 360px 20px 190px; background: var(--ed-panel); border: 1px solid var(--ed-line); border-radius: 10px; box-shadow: 0 20px 60px #000a; flex-direction: column; z-index: 5; }
+#code.open { display: flex; }
+#code header { border-radius: 10px 10px 0 0; }
+#code textarea { flex: 1; border: 0; border-radius: 0 0 10px 10px; padding: 12px; resize: none; }
+#nobridge { display: none; position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: #3a1d1d; border: 1px solid #6b2f2f; padding: 8px 14px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Theme Studio</h1>
+    <button id="new">New</button>
+    <button id="template">Neubrutalism</button>
+    <button id="import">Import graph…</button>
+    <button id="export">Export graph</button>
+    <label><input type="checkbox" id="dark"> Dark preview</label>
+    <span class="grow"></span>
+    <span id="status">Starting…</span>
+    <button id="save">Save</button>
+    <button id="apply" class="primary">Save and use</button>
+  </header>
+  <nav id="palette"><h2>Add a node</h2></nav>
+  <main id="board"><div id="world"></div></main>
+  <aside id="side">
+    <section id="inspector"><h2>Inspector</h2><p class="hint">Select a node to edit it. Drag from an output dot to an input dot to wire them; click a wire to remove it. Drag the background to pan.</p></section>
+    <section id="preview-wrap">
+      <h2>Preview</h2>
+      <div id="preview">
+        <div class="bar ht-toolbar">
+          <span class="tab ht-tab">Start</span><span class="tab ht-tab dim">Docs</span>
+          <div class="addr"><span class="ht-field">stonedgem://start</span><b class="ht-button">Go</b></div>
+        </div>
+        <div class="page" id="page">
+          <div class="card ht-card"><h3 id="pv-name">Untitled</h3><p>Every panel follows the graph.</p><span class="go ht-button">Open</span><span class="no">Remove</span></div>
+          <div class="popup ht-popup"><div>New tab</div><div>History</div><div>Settings</div></div>
+        </div>
+      </div>
+      <div id="warnings"></div>
+      <div id="parts"></div>
+    </section>
+  </aside>
+</div>
+<div id="code"><header><h1 id="code-title">Part</h1><span class="grow"></span><button id="code-close">Close</button></header><textarea id="code-text" spellcheck="false"></textarea></div>
+<div id="nobridge">Open Theme Studio from StonedGem's menu: the page talks to its Zsharpend script through the browser.</div>
+<script>
+"use strict";
+// The built-in Neubrutalism graph (filled in when the extension is installed).
+const TEMPLATE = /*NEUBRUTALISM_GRAPH*/null;
+
+const COLOR_TOKENS = ["background", "surface", "surface_alt", "text", "muted", "accent", "on_accent", "border", "danger", "shadow"];
+const NUMBER_TOKENS = ["radius", "border_width", "shadow_x", "shadow_y", "shadow_blur"];
+const PANELS = ["toolbar", "tab", "card", "button", "field", "popup"];
+const SAMPLE_SHADER = "fragment background(uv: vec2) -> color {\n    let a = vec3(1.0, 0.96, 0.86)\n    let b = vec3(1.0, 0.87, 0.35)\n    return vec4(mix(a, b, uv.y), 1.0)\n}\n";
+
+// What each kind of node takes, gives and has.
+const KINDS = {
+  color:    { label: "Colour",   out: "color",  ins: [], props: [["value", "color", "#ff5c8a"]] },
+  hsl:      { label: "HSL",      out: "color",  ins: [], props: [["h", "number", 330], ["s", "number", 0.9], ["l", "number", 0.6]] },
+  mix:      { label: "Mix",      out: "color",  ins: [["a", "color"], ["b", "color"]], props: [["t", "number", 0.5]] },
+  shade:    { label: "Shade",    out: "color",  ins: [["color", "color"]], props: [["amount", "number", 0.2]] },
+  readable: { label: "Readable", out: "color",  ins: [["on", "color"]], props: [["dark", "color", "#111111"], ["light", "color", "#ffffff"]] },
+  number:   { label: "Number",   out: "number", ins: [], props: [["value", "number", 4]] },
+  font:     { label: "Font",     out: "font",   ins: [], props: [["family", "text", "system-ui, sans-serif"], ["weight", "number", 600]] },
+  shader:   { label: "Shader",   out: "shader", ins: [], props: [["code", "code", SAMPLE_SHADER]] },
+  panel:    { label: "Panel",    out: "panel",  ins: [["fill", "color"], ["text", "color"], ["border", "color"], ["radius", "number"], ["border_width", "number"], ["shadow_x", "number"], ["shadow_y", "number"]],
+              props: [["panel", ["toolbar", "tab", "card", "button", "field", "popup"], "card"]] },
+  theme:    { label: "Theme",    out: null,
+              ins: COLOR_TOKENS.map(k => [k, "color"]).concat(NUMBER_TOKENS.map(k => [k, "number"]), [["font", "font"], ["backdrop", "shader"], ["panels", "panel", true]]),
+              props: [["mode", ["light", "dark"], "light"], ["name", "text", "My theme"], ["author", "text", ""], ["description", "text", ""], ["glass", "bool", false]] },
+};
+// Wires are drawn on a canvas, so they need real colours.
+const WIRE_COLOR = { color: "#f2b84b", number: "#6fc3df", font: "#c792ea", shader: "#7ee787", panel: "#ff8fb1" };
+const TYPE_COLOR = { color: "var(--t-color)", number: "var(--t-number)", font: "var(--t-font)", shader: "var(--t-shader)", panel: "var(--t-panel)" };
+
+let graph = { version: 1, nodes: [], wires: [] };
+let selected = null, values = {}, thumbs = {}, files = {}, pan = { x: 40, y: 20 };
+const $ = (s) => document.querySelector(s);
+// Wires are drawn off screen and shown as the board's background, so they
+// always sit under the nodes.
+const board = $("#board"), world = $("#world"), canvas = document.createElement("canvas");
+let drawn = []; // the wires on screen: { i, a, b } in board coordinates
+const bridge = typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage;
+
+function send(msg) {
+  if (!bridge) { $("#nobridge").style.display = "block"; return Promise.reject(new Error("no browser bridge")); }
+  return chrome.runtime.sendMessage(msg);
+}
+function status(t) { $("#status").textContent = t; }
+function node(id) { return graph.nodes.find(n => n.id === id); }
+function kind(n) { return KINDS[n.type] || { label: n.type, out: null, ins: [], props: [] }; }
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
+function title(n) {
+  if (n.type === "theme") return (n.props.mode === "dark" ? "Theme · dark" : "Theme · " + (n.props.name || "light"));
+  if (n.type === "panel") return "Panel · " + n.props.panel;
+  return kind(n).label;
+}
+
+// ── Drawing ───────────────────────────────────────────────────────────────
+
+function render() {
+  world.querySelectorAll(".node").forEach(e => e.remove());
+  for (const n of graph.nodes) world.appendChild(nodeEl(n));
+  drawWires();
+  inspector();
+}
+
+function nodeEl(n) {
+  const k = kind(n), el = document.createElement("div");
+  el.className = "node" + (selected === n.id ? " sel" : "");
+  el.style.left = n.x + "px"; el.style.top = n.y + "px"; el.dataset.id = n.id;
+  const v = values[n.id];
+  const sw = typeof v === "string" && v[0] === "#" ? `<span class="sw" style="background:${esc(v)}"></span>` : "";
+  const num = typeof v === "number" ? `<small>${+v.toFixed(2)}</small>` : "";
+  let html = `<div class="head" style="border-top:3px solid ${k.out ? TYPE_COLOR[k.out] : "var(--ed-sel)"}">${sw}<b>${esc(title(n))}</b>${num}</div><div class="ports">`;
+  for (const [name, type] of k.ins) {
+    const wired = graph.wires.some(w => w.to === n.id && w.in === name);
+    html += `<div class="port in${wired ? " wired" : ""}" data-port="${name}" data-type="${type}"><i class="dot" style="background:${TYPE_COLOR[type]}"></i>${name.replace(/_/g, " ")}</div>`;
+  }
+  if (k.out) html += `<div class="port out" data-type="${k.out}">${k.out}<i class="dot" style="background:${TYPE_COLOR[k.out]}"></i></div>`;
+  html += "</div>";
+  if (thumbs[n.id]) html += `<img class="thumb" src="${thumbs[n.id]}">`;
+  el.innerHTML = html;
+  el.querySelector(".head").addEventListener("mousedown", (e) => dragNode(e, n));
+  el.addEventListener("mousedown", (e) => { e.stopPropagation(); if (selected !== n.id) { selected = n.id; render(); } });
+  const out = el.querySelector(".port.out .dot");
+  if (out) out.addEventListener("mousedown", (e) => { e.stopPropagation(); dragWire(e, n); });
+  return el;
+}
+
+function portPos(id, port) {
+  const el = world.querySelector(`.node[data-id="${CSS.escape(id)}"]`);
+  if (!el) return null;
+  const dot = port === null ? el.querySelector(".port.out .dot") : el.querySelector(`.port.in[data-port="${port}"] .dot`);
+  if (!dot) return null;
+  const r = dot.getBoundingClientRect(), w = board.getBoundingClientRect();
+  return { x: r.left - w.left + r.width / 2, y: r.top - w.top + r.height / 2 };
+}
+// A wire's curve: four control points.
+function controls(a, b) {
+  const dx = Math.max(40, Math.abs(b.x - a.x) * 0.5);
+  return [a, { x: a.x + dx, y: a.y }, { x: b.x - dx, y: b.y }, b];
+}
+function stroke(ctx, a, b, color, dashed) {
+  const [p0, p1, p2, p3] = controls(a, b);
+  ctx.beginPath();
+  ctx.setLineDash(dashed ? [6, 5] : []);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.moveTo(p0.x, p0.y);
+  ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
+  ctx.stroke();
+}
+function drawWires(draft) {
+  const w = board.clientWidth, h = board.clientHeight;
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, w, h);
+  drawn = [];
+  graph.wires.forEach((wire, i) => {
+    const a = portPos(wire.from, null), b = portPos(wire.to, wire.in), f = node(wire.from);
+    if (!(a && b && f)) return;
+    stroke(ctx, a, b, WIRE_COLOR[kind(f).out] || "#888888", false);
+    drawn.push({ i, a, b });
+  });
+  if (draft) stroke(ctx, draft.a, draft.b, draft.color, true);
+  board.style.backgroundImage = `url(${canvas.toDataURL()}), radial-gradient(var(--ed-grid) 1.2px, transparent 1.2px)`;
+  board.style.backgroundSize = `${w}px ${h}px, 22px 22px`;
+  board.style.backgroundRepeat = "no-repeat, repeat";
+}
+// The wire under a point (board coordinates), if any: the curve sampled.
+function wireAt(pt) {
+  for (const d of drawn) {
+    const [p0, p1, p2, p3] = controls(d.a, d.b);
+    for (let k = 0; k <= 32; k++) {
+      const t = k / 32, u = 1 - t;
+      const x = u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x;
+      const y = u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y;
+      if (Math.hypot(x - pt.x, y - pt.y) < 6) return d.i;
+    }
+  }
+  return -1;
+}
+
+// ── Interaction ───────────────────────────────────────────────────────────
+
+function local(e) {
+  const r = board.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+function dragNode(e, n) {
+  e.preventDefault(); e.stopPropagation();
+  selected = n.id;
+  const start = { x: e.clientX, y: e.clientY, nx: n.x, ny: n.y };
+  const el = world.querySelector(`.node[data-id="${CSS.escape(n.id)}"]`);
+  world.querySelectorAll(".node.sel").forEach(x => x.classList.remove("sel"));
+  el.classList.add("sel");
+  const move = (m) => { n.x = Math.round(start.nx + m.clientX - start.x); n.y = Math.round(start.ny + m.clientY - start.y); el.style.left = n.x + "px"; el.style.top = n.y + "px"; drawWires(); };
+  const up = () => { removeEventListener("mousemove", move); removeEventListener("mouseup", up); inspector(); store(); };
+  addEventListener("mousemove", move); addEventListener("mouseup", up);
+}
+function dragWire(e, from) {
+  e.preventDefault();
+  const type = kind(from).out, a = portPos(from.id, null);
+  const targets = [...world.querySelectorAll(`.port.in[data-type="${type}"] .dot`)].filter(d => d.closest(".node").dataset.id !== from.id);
+  targets.forEach(d => d.classList.add("ok"));
+  const move = (m) => drawWires({ a, b: local(m), color: WIRE_COLOR[type] });
+  const up = (m) => {
+    removeEventListener("mousemove", move); removeEventListener("mouseup", up);
+    targets.forEach(d => d.classList.remove("ok"));
+    const hit = document.elementFromPoint(m.clientX, m.clientY);
+    const port = hit && hit.closest && hit.closest(".port.in");
+    if (port && targets.includes(port.querySelector(".dot"))) {
+      const to = port.closest(".node").dataset.id, name = port.dataset.port;
+      const multi = (kind(node(to)).ins.find(p => p[0] === name) || [])[2];
+      if (!multi) graph.wires = graph.wires.filter(w => !(w.to === to && w.in === name));
+      if (!graph.wires.some(w => w.from === from.id && w.to === to && w.in === name)) graph.wires.push({ from: from.id, to, in: name });
+      changed();
+    } else drawWires();
+  };
+  addEventListener("mousemove", move); addEventListener("mouseup", up);
+}
+board.addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return;
+  const hit = wireAt(local(e));
+  if (hit >= 0) { graph.wires.splice(hit, 1); changed(); return; }
+  if (selected) { selected = null; render(); }
+  board.classList.add("panning");
+  const start = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
+  const move = (m) => { pan.x = start.px + m.clientX - start.x; pan.y = start.py + m.clientY - start.y; place(); };
+  const up = () => { board.classList.remove("panning"); removeEventListener("mousemove", move); removeEventListener("mouseup", up); };
+  addEventListener("mousemove", move); addEventListener("mouseup", up);
+});
+function place() { world.style.transform = `translate(${pan.x}px, ${pan.y}px)`; drawWires(); }
+addEventListener("resize", () => drawWires());
+addEventListener("keydown", (e) => {
+  if ((e.key === "Delete" || e.key === "Backspace") && selected && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
+    graph.nodes = graph.nodes.filter(n => n.id !== selected);
+    graph.wires = graph.wires.filter(w => w.from !== selected && w.to !== selected);
+    selected = null; changed();
+  }
+  if (e.key === "Escape") $("#code").classList.remove("open");
+});
+
+function addNode(type) {
+  const k = KINDS[type], props = {};
+  for (const [name, , def] of k.props) props[name] = def;
+  let i = 1; while (node(type + i)) i++;
+  const n = { id: type + i, type, x: Math.round(-pan.x + 220 + Math.random() * 120), y: Math.round(-pan.y + 120 + Math.random() * 120), props };
+  graph.nodes.push(n); selected = n.id; changed();
+}
+
+// ── Inspector ─────────────────────────────────────────────────────────────
+
+function inspector() {
+  const box = $("#inspector"), n = selected && node(selected);
+  if (!n) { box.innerHTML = '<h2>Inspector</h2><p class="hint">Select a node to edit it. Drag from an output dot to an input dot to wire them; click a wire to remove it. Delete removes the selected node. Drag the background to pan.</p>'; return; }
+  let html = `<h2>${esc(title(n))} <small style="text-transform:none;letter-spacing:0">(${esc(n.id)})</small></h2>`;
+  for (const [name, type] of kind(n).props) {
+    const v = n.props[name];
+    html += `<label class="field"><span>${name.replace(/_/g, " ")}</span>`;
+    if (type === "color") html += `<div class="row"><input type="color" data-p="${name}" value="${esc(v)}"><input data-p="${name}" value="${esc(v)}"></div>`;
+    else if (type === "number") html += `<input type="number" step="any" data-p="${name}" data-num value="${esc(v)}">`;
+    else if (type === "bool") html += `<input type="checkbox" style="width:auto" data-p="${name}" data-bool ${v ? "checked" : ""}>`;
+    else if (type === "code") html += `<textarea rows="14" data-p="${name}" spellcheck="false">${esc(v)}</textarea>`;
+    else if (Array.isArray(type)) html += `<select data-p="${name}">${type.map(o => `<option${o === v ? " selected" : ""}>${o}</option>`).join("")}</select>`;
+    else html += `<input data-p="${name}" value="${esc(v)}">`;
+    html += "</label>";
+  }
+  if (n.type === "shader") html += `<span class="hint">Drawn by Zsharpend's .zsg renderer:</span>${thumbs[n.id] ? `<img src="${thumbs[n.id]}">` : ""}`;
+  if (values[n.id] !== undefined && typeof values[n.id] !== "object") html += `<p class="hint">Gives <b>${esc(values[n.id])}</b></p>`;
+  box.innerHTML = html;
+  box.querySelectorAll("[data-p]").forEach(inp => inp.addEventListener("input", () => {
+    let v = inp.dataset.bool !== undefined ? inp.checked : inp.value;
+    if (inp.dataset.num !== undefined) { v = parseFloat(v); if (isNaN(v)) return; }
+    n.props[inp.dataset.p] = v;
+    box.querySelectorAll(`[data-p="${inp.dataset.p}"]`).forEach(o => { if (o !== inp && o.type !== "checkbox") o.value = v; });
+    if (n.type === "shader") shader(n);
+    changed(true);
+  }));
+}
+
+// ── Talking to script.zxx ─────────────────────────────────────────────────
+
+let timer = null, seq = 0;
+function changed(keepInspector) {
+  if (!keepInspector) render(); else drawWires();
+  store();
+  clearTimeout(timer);
+  timer = setTimeout(compile, 220);
+}
+function store() {
+  if (bridge) chrome.storage.local.set({ graph: JSON.stringify(graph) }).catch(() => {});
+}
+async function compile() {
+  const mine = ++seq;
+  status("Compiling with Zsharpend…");
+  try {
+    const r = await send({ kind: "compile", graph, dark: $("#dark").checked });
+    if (mine !== seq) return;
+    files = r.files || {};
+    values = r.values || {};
+    $("#preview-css").textContent = r.css || "";
+    $("#pv-name").textContent = r.name || "Untitled";
+    $("#warnings").innerHTML = (r.warnings || []).map(w => `<div>⚠ ${esc(w)}</div>`).join("");
+    $("#parts").innerHTML = Object.keys(files).sort().map(f => `<button data-f="${esc(f)}">${esc(f)}</button>`).join("");
+    $("#parts").querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+      $("#code-title").textContent = b.dataset.f; $("#code-text").value = files[b.dataset.f]; $("#code").classList.add("open");
+    }));
+    const bd = files["background.zsg"];
+    $("#page").style.backgroundImage = bd && thumbs.__backdrop ? `url(${thumbs.__backdrop})` : "none";
+    if (bd && bd !== thumbs.__backdropSrc) backdrop(bd);
+    status(`${Object.keys(files).length} parts · ${(r.warnings || []).length} warnings`);
+    const sel = selected; render(); selected = sel;
+  } catch (e) {
+    if (mine === seq) { status("Error: " + e.message); $("#warnings").textContent = e.message; }
+  }
+}
+async function shader(n) {
+  try {
+    const r = await send({ kind: "shader", code: n.props.code });
+    thumbs[n.id] = r.image;
+    const img = world.querySelector(`.node[data-id="${CSS.escape(n.id)}"] .thumb`);
+    if (img) img.src = r.image; else render();
+    const ins = $("#inspector img"); if (ins && selected === n.id) ins.src = r.image;
+  } catch (e) { status("Shader: " + e.message); }
+}
+async function backdrop(code) {
+  thumbs.__backdropSrc = code;
+  try {
+    const r = await send({ kind: "shader", code });
+    thumbs.__backdrop = r.image;
+    $("#page").style.backgroundImage = `url(${r.image})`;
+  } catch (e) { /* shown on the node */ }
+}
+async function save(use) {
+  status(use ? "Saving and applying…" : "Saving…");
+  try {
+    const r = await send({ kind: use ? "apply" : "save", graph });
+    status(`Saved as ${r.file}` + (use ? " and in use" : ""));
+  } catch (e) { status("Not saved: " + e.message); $("#warnings").textContent = e.message; }
+}
+
+function load(g) {
+  graph = { version: 1, nodes: g.nodes || [], wires: g.wires || [] };
+  for (const n of graph.nodes) { n.props = n.props || {}; }
+  selected = null; values = {}; thumbs = {};
+  render(); compile();
+  graph.nodes.filter(n => n.type === "shader").forEach(shader);
+}
+
+// ── Start ─────────────────────────────────────────────────────────────────
+
+for (const [type, k] of Object.entries(KINDS)) {
+  const b = document.createElement("button");
+  b.innerHTML = `<i style="background:${k.out ? TYPE_COLOR[k.out] : "var(--ed-sel)"}"></i>${k.label}`;
+  b.addEventListener("click", () => addNode(type));
+  $("#palette").appendChild(b);
+}
+$("#new").addEventListener("click", () => {
+  load({ nodes: [{ id: "theme1", type: "theme", x: 520, y: 40, props: { mode: "light", name: "My theme", author: "", description: "", glass: false } }], wires: [] });
+});
+$("#template").addEventListener("click", () => TEMPLATE && load(JSON.parse(JSON.stringify(TEMPLATE))));
+$("#export").addEventListener("click", () => {
+  $("#code-title").textContent = "graph.json"; $("#code-text").value = JSON.stringify(graph, null, 1); $("#code").classList.add("open");
+});
+$("#import").addEventListener("click", () => {
+  const t = prompt("Paste a graph.json:");
+  if (t) { try { load(JSON.parse(t)); } catch (e) { status("Not a graph: " + e.message); } }
+});
+$("#code-close").addEventListener("click", () => $("#code").classList.remove("open"));
+$("#dark").addEventListener("change", compile);
+$("#save").addEventListener("click", () => save(false));
+$("#apply").addEventListener("click", () => save(true));
+place();
+
+(async () => {
+  let g = null;
+  if (bridge) {
+    try { const s = await chrome.storage.local.get("graph"); if (s && s.graph) g = JSON.parse(s.graph); } catch (e) { /* first run */ }
+  }
+  load(g || TEMPLATE || { nodes: [], wires: [] });
+})();
+</script>
+</body>
+</html>

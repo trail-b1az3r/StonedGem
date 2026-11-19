@@ -20,6 +20,8 @@ pub struct Settings {
     pub hide_elements: bool,
     /// Reopen the last session's tabs on start.
     pub restore_tabs: bool,
+    /// The `.hypertheme` in use (its file name); empty: the accent palette.
+    pub hypertheme: String,
 }
 
 impl Default for Settings {
@@ -32,6 +34,7 @@ impl Default for Settings {
             blocker: true,
             hide_elements: true,
             restore_tabs: true,
+            hypertheme: String::new(),
         }
     }
 }

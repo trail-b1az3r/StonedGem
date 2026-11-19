@@ -111,6 +111,12 @@ pub struct Browser {
     pub settings: Settings,
     pub home_draft: String,
     pub palette: Palette,
+    /// The hypertheme in use, if any.
+    pub hyper: Option<stonedgem_chrome::hyper::InUse>,
+    pub hyper_path: String,
+    pub hyper_message: String,
+    /// Theme Studio's extension id.
+    pub studio: Option<String>,
     ticks: u64,
     /// A field to focus once it's on screen (it may not exist until the
     /// next view, e.g. the find bar right after Ctrl+F).
@@ -208,6 +214,10 @@ pub enum Message {
     SetSearch(String),
     SetDark(bool),
     SetAccent(String),
+    SetHypertheme(String),
+    HyperPath(String),
+    HyperInstall,
+    OpenStudio,
     SetBlocker(bool),
     SetHideElements(bool),
     HomeDraft(String),
@@ -222,7 +232,17 @@ impl Browser {
         settings.apply_blocker();
         let view = (1200, (800.0 - CHROME_HEIGHT) as u32);
         let engine = Engine::headless(view.0, view.1).expect("software rendering needs Mesa's EGL (libegl-mesa0)");
-        let palette = Palette::new(&settings.accent, settings.dark);
+        let (palette, hyper, hyper_err) = stonedgem_chrome::hyper::palette(&settings);
+        let studio = {
+            let mut list = stonedgem_extensions::registry::load();
+            match stonedgem_chrome::hyper::install_studio(&mut list) {
+                Ok(id) => Some(id),
+                Err(e) => {
+                    eprintln!("stonedgem: Theme Studio: {e}");
+                    None
+                }
+            }
+        };
         let mut b = Browser {
             engine,
             tabs: vec![],
@@ -239,6 +259,10 @@ impl Browser {
             home_draft: settings.home.clone(),
             settings,
             palette,
+            hyper,
+            hyper_path: String::new(),
+            hyper_message: hyper_err.unwrap_or_default(),
+            studio,
             ticks: 0,
             focus_next: None,
             downloads: Downloads::default(),
@@ -320,6 +344,12 @@ impl Browser {
 
     /// The start page, with enabled extensions' widgets.
     fn start_url(&self) -> String {
+        if let Some(t) = &self.hyper {
+            match stonedgem_chrome::hyper::start_page(t, product()) {
+                Ok(url) => return url,
+                Err(e) => eprintln!("stonedgem: hypertheme start page: {e}"),
+            }
+        }
         let widgets: Vec<(String, String)> = self
             .extensions
             .iter()
@@ -364,6 +394,7 @@ impl Browser {
                         let _ = p.eval(&self.engine, &stonedgem_chrome::zs_hooks::css_js(&css), Duration::from_secs(2));
                     }
                 }
+                Action::ApplyHypertheme(f) => self.use_hypertheme(f),
             }
         }
     }
@@ -444,7 +475,12 @@ impl Browser {
     }
 
     fn save_settings(&mut self) {
-        self.palette = Palette::new(&self.settings.accent, self.settings.dark);
+        let (palette, hyper, err) = stonedgem_chrome::hyper::palette(&self.settings);
+        self.palette = palette;
+        self.hyper = hyper;
+        if let Some(e) = err {
+            self.hyper_message = e;
+        }
         self.settings.apply_blocker();
         if let Err(e) = self.settings.save() {
             eprintln!("stonedgem: saving settings: {e}");
@@ -472,6 +508,38 @@ impl Browser {
         }
         stonedgem_blocker::blocker::set_extension_filters(stonedgem_extensions::registry::filter_files(&self.extensions));
         self.zs = stonedgem_chrome::zs_hooks::Scripts::load(&self.extensions);
+    }
+
+    /// Use an installed (or built-in) hypertheme; empty: the accent palette.
+    fn use_hypertheme(&mut self, file: String) {
+        self.settings.hypertheme = file;
+        self.hyper_message.clear();
+        self.save_settings();
+        if !self.hyper_message.is_empty() {
+            self.notify(self.hyper_message.clone());
+            self.settings.hypertheme.clear();
+            self.save_settings();
+        }
+    }
+
+    /// Open an extension's page (`extra.html`) with the bridge to its script.
+    fn open_ext_page(&mut self, id: &str) {
+        let Some(e) = self.extensions.iter().find(|e| e.id == id) else { return };
+        let dir = std::path::Path::new(&e.path);
+        let Some(f) = ["extra.html", "extra.md.html"].iter().map(|f| dir.join(f)).find(|f| f.exists()) else { return };
+        let url = format!("file://{}", f.display());
+        let mut scripts = self.ext_scripts.clone();
+        if e.has_script {
+            scripts.push(stonedgem_chrome::hyper::page_bridge(e));
+            self.hub.content_api = true;
+        }
+        match self.engine.open(&url, &scripts, &[]) {
+            Ok(page) => {
+                self.tabs.push(Tab { content: Content::Web(page), info: TabInfo { url, loading: true, ..Default::default() }, recorded: String::new() });
+                self.select(self.tabs.len() - 1);
+            }
+            Err(err) => self.notify(err),
+        }
     }
 
     fn notify(&mut self, text: impl Into<String>) {
@@ -623,6 +691,10 @@ impl Browser {
                                     }
                                     continue;
                                 }
+                                Action::ApplyHypertheme(f) => {
+                                    self.use_hypertheme(f);
+                                    continue;
+                                }
                             };
                             if let Some(Tab { content: Content::Web(p), .. }) = self.tabs.get(i) {
                                 let _ = p.eval(&self.engine, &js, Duration::from_secs(2));
@@ -673,6 +745,7 @@ impl Browser {
                                     let _ = p.set(&k, &v);
                                 }
                             }
+                            Effect::ApplyHypertheme(f) => self.use_hypertheme(f),
                         }
                     }
                 }
@@ -680,7 +753,6 @@ impl Browser {
                 if let Some(events) = self.panel.as_ref().map(|p| (p.ext.clone(), p.take_events())) {
                     let (ext, events) = events;
                     for (name, args) in events {
-                        let args = args.iter().map(stonedgem_chrome::bridge::from_json).collect();
                         if let Some((r, actions)) = self.zs.panel(&ext, &name, args) {
                             if let Err(e) = r {
                                 self.notify(e);
@@ -820,14 +892,7 @@ impl Browser {
             }
             Message::OpenExtPage(id) => {
                 self.menu = false;
-                if let Some(e) = self.extensions.iter().find(|e| e.id == id) {
-                    let dir = std::path::Path::new(&e.path);
-                    let file = ["extra.html", "extra.md.html"].iter().map(|f| dir.join(f)).find(|f| f.exists());
-                    if let Some(f) = file {
-                        let url = format!("file://{}", f.display());
-                        self.open_web(&url);
-                    }
-                }
+                self.open_ext_page(&id);
             }
             Message::Clicked => {
                 self.editing = false;
@@ -1050,6 +1115,26 @@ impl Browser {
                 stonedgem_extensions::registry::remove(&id, &mut list);
                 stonedgem_extensions::registry::save(&list);
                 self.reload_extensions();
+            }
+            Message::SetHypertheme(f) => self.use_hypertheme(f),
+            Message::HyperPath(p) => self.hyper_path = p,
+            Message::HyperInstall => {
+                let path = std::path::PathBuf::from(self.hyper_path.trim());
+                match stonedgem_hypertheme::install(&path) {
+                    Ok(f) => {
+                        self.hyper_path.clear();
+                        self.hyper_message = format!("Installed {f}.");
+                        self.use_hypertheme(f);
+                    }
+                    Err(e) => self.hyper_message = format!("Couldn't install it: {e}"),
+                }
+            }
+            Message::OpenStudio => {
+                self.menu = false;
+                match self.studio.clone().filter(|id| self.extensions.iter().any(|e| &e.id == id && e.enabled)) {
+                    Some(id) => self.open_ext_page(&id),
+                    None => self.notify("Theme Studio is turned off (Settings › Extensions)."),
+                }
             }
             Message::SetRestore(on) => {
                 self.settings.restore_tabs = on;

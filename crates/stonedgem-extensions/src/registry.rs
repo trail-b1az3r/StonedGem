@@ -1111,7 +1111,8 @@ pub fn compile_widget(dir: &Path) -> Result<String, String> {
 /// `Fragment`, `useState`, `useEffect`, `render`, plus `oynix` (the
 /// extension's id and extra.jsonl data). Re-rendering rebuilds the DOM;
 /// widgets are small, so that's simple and fast enough.
-const WIDGET_RUNTIME: &str = r#"
+/// The tiny React-like runtime `widget.tsx` (and hypertheme `start.tsx`) run on.
+pub const WIDGET_RUNTIME: &str = r#"
 var Fragment = { fragment: true };
 var __w = { root: null, el: null, states: [], effects: [], i: 0, e: 0, queued: false };
 function h(type, props) {
@@ -1615,8 +1616,17 @@ fn install_as(source: &Path, list: &mut Vec<Entry>, builtin: bool) -> Result<Ent
     let staging = base.join(format!(".staging-{}-{}-{n}", std::process::id(), now()));
     let _ = std::fs::remove_dir_all(&staging);
     std::fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
-    let result = install_inner(source, &staging, &base, list, builtin);
+    let mut result = install_inner(source, &staging, &base, list, builtin);
     let _ = std::fs::remove_dir_all(&staging);
+    if builtin {
+        // It came with the browser: it can be turned off, not removed.
+        if let Ok(e) = result.as_mut() {
+            e.builtin = true;
+            if let Some(x) = list.iter_mut().find(|x| x.id == e.id) {
+                x.builtin = true;
+            }
+        }
+    }
     result
 }
 

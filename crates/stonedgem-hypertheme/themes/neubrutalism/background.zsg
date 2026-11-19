@@ -1,0 +1,14 @@
+// Neubrutalism: a dot grid on cream, with a hard-edged yellow block.
+fragment background(uv: vec2) -> color {
+    let cream = vec3(1.0, 0.957, 0.863)
+    let ink = vec3(0.067, 0.067, 0.067)
+    let yellow = vec3(1.0, 0.871, 0.349)
+    let cell = fract(uv * vec2(64.0, 36.0)) - vec2(0.5, 0.5)
+    let dot = smoothstep(0.17, 0.12, length(cell))
+    var c = mix(cream, ink, dot * 0.16)
+    let block = step(0.72, uv.x) * step(uv.y, 0.30)
+    let edge = step(0.715, uv.x) * step(uv.y, 0.305) - block
+    c = mix(c, yellow, block)
+    c = mix(c, ink, edge)
+    return vec4(c, 1.0)
+}

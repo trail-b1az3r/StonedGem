@@ -1,0 +1,19 @@
+[package]
+name = "stonedgem-hypertheme"
+description = ".hypertheme: whole-UI themes for StonedGem and OyNIx — tokens, basic-Rust styles, Zsharpend and Z#++ theme programs, Iced, CSS, TSX, QML and shader parts."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+stonedgem-extensions = { path = "../stonedgem-extensions" }
+stonedgem-zsharp = { path = "../stonedgem-zsharp" }
+stonedgem-profile = { path = "../stonedgem-profile" }
+# Zsharpend (the next Z#++), for theme.zxx programs.
+zsharpend = { git = "https://github.com/trail-b1az3r/z-nd", rev = "8442032c1d9f8203af71b997ba3c5cbc34369e82" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = "0.9"
+zip = { version = "2", default-features = false, features = ["deflate"] }

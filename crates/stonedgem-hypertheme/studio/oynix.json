@@ -1,0 +1,8 @@
+{
+  "name": "Theme Studio",
+  "version": "1.0.0",
+  "description": "Make a .hypertheme by wiring nodes: colours, numbers, fonts, shaders and panels. Its Zsharpend script writes every part.",
+  "author": "StonedGem",
+  "power": true,
+  "matches": []
+}

@@ -75,7 +75,7 @@ fn panel_draws_and_talks_to_its_script() {
     let events = p.take_events();
     assert_eq!(events, vec![("clicked".to_string(), vec![serde_json::json!(1)])]);
     for (name, args) in events {
-        let (r, actions) = scripts.panel(&e.id, &name, args.iter().map(stonedgem_chrome::bridge::from_json).collect()).unwrap();
+        let (r, actions) = scripts.panel(&e.id, &name, args.clone()).unwrap();
         r.unwrap();
         for a in actions {
             if let Action::PanelSet(k, v) = a {

@@ -1,0 +1,7 @@
+/* Neubrutalism: extra page styles (Theme Studio). */
+::selection { background: var(--ht-accent); color: var(--ht-on-accent); }
+a { color: var(--ht-text); text-decoration-thickness: 3px; text-decoration-color: var(--ht-accent); }
+h1, h2, h3 { letter-spacing: -0.02em; }
+.ht-button, .ht-card { transition: transform .08s, box-shadow .08s; }
+.ht-button:hover, .ht-card:hover { transform: translate(-2px, -2px); box-shadow: calc(var(--ht-shadow-x) + 2px) calc(var(--ht-shadow-y) + 2px) 0 var(--ht-shadow); }
+.ht-button:active { transform: translate(var(--ht-shadow-x), var(--ht-shadow-y)); box-shadow: none; }

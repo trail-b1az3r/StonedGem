@@ -33,6 +33,20 @@ fn radius(r: f32) -> Radius {
     Radius { top_left: r, top_right: r, bottom_right: r, bottom_left: r }
 }
 
+/// A corner radius scaled by the theme's rounding.
+fn rr(p: Palette, r: f32) -> Radius {
+    radius(r * p.round)
+}
+
+/// The theme's panel border: (width, colour), or the default hairline.
+fn edge(p: Palette, default_width: f32, default_color: Color) -> (f32, Color) {
+    if p.edge > 0.0 {
+        (p.edge, p.edge_color)
+    } else {
+        (default_width, default_color)
+    }
+}
+
 fn alpha(c: Color, a: f32) -> Color {
     Color { a, ..c }
 }
@@ -78,17 +92,25 @@ fn backdrop(p: Palette) -> container::Style {
 
 /// Translucent glass for controls in use (hovered buttons, tabs).
 fn glass_fill(p: Palette) -> Color {
+    if !p.glass {
+        return mix(p.surface_high, p.on_surface, 0.08);
+    }
     alpha(p.surface_highest, if p.dark { 0.55 } else { 0.62 })
 }
 
 /// Glass at rest that must stay legible (address field, selected tab).
 fn glass_strong(p: Palette) -> Color {
+    if !p.glass {
+        return p.surface_high;
+    }
     alpha(p.surface_highest, if p.dark { 0.78 } else { 0.86 })
 }
 
 /// The light rim around glass.
 fn glass_rim(p: Palette) -> Color {
-    if p.dark {
+    if p.edge > 0.0 {
+        p.edge_color
+    } else if p.dark {
         alpha(Color::WHITE, 0.14)
     } else {
         alpha(p.outline_variant, 0.65)
@@ -97,7 +119,9 @@ fn glass_rim(p: Palette) -> Color {
 
 /// The bright specular line along the top edge of glass.
 fn specular(p: Palette) -> Color {
-    if p.dark {
+    if !p.glass {
+        Color::TRANSPARENT
+    } else if p.dark {
         alpha(Color::WHITE, 0.20)
     } else {
         alpha(Color::WHITE, 0.95)
@@ -106,10 +130,21 @@ fn specular(p: Palette) -> Color {
 
 /// The translucent toolbar/tab bar.
 fn glass_bar(p: Palette) -> container::Style {
+    if let Some(c) = p.toolbar {
+        return container::Style { background: Some(Background::Color(c)), ..Default::default() };
+    }
+    if !p.glass {
+        return container::Style { background: Some(Background::Color(p.surface_container)), ..Default::default() };
+    }
     container::Style { background: Some(Background::Color(alpha(p.surface_container, if p.dark { 0.88 } else { 0.86 }))), ..Default::default() }
 }
 
 /// A 1 px line in `c`, full width.
+/// A full-width line `h` px thick.
+fn rule<'a>(c: Color, h: f32) -> Element<'a, Message> {
+    container(space()).width(Length::Fill).height(h).style(move |_: &Theme| container::Style { background: Some(Background::Color(c)), ..Default::default() }).into()
+}
+
 fn line<'a>(c: Color) -> Element<'a, Message> {
     container(space()).width(Length::Fill).height(1).style(move |_: &Theme| container::Style { background: Some(Background::Color(c)), ..Default::default() }).into()
 }
@@ -118,17 +153,37 @@ fn line<'a>(c: Color) -> Element<'a, Message> {
 /// (No shadow: Iced's CPU renderer doesn't clip shadows to the scroll
 /// area, so they would spill over the panel.)
 fn card_style(p: Palette) -> container::Style {
+    if !p.glass {
+        // Flat themes: an opaque card with the theme's border and its hard
+        // shadow (a few pixels; blur-free, so it barely spills).
+        let (w, c) = edge(p, 1.0, p.outline_variant);
+        return container::Style {
+            background: Some(Background::Color(p.card.unwrap_or(p.surface_container))),
+            border: Border { radius: rr(p, 24.0), width: w, color: c },
+            shadow: p.hard_shadow(),
+            ..Default::default()
+        };
+    }
     container::Style {
         background: Some(Background::Color(alpha(p.surface_container, if p.dark { 0.82 } else { 0.86 }))),
-        border: Border { radius: radius(24.0), width: 1.0, color: highlight(p) },
+        border: Border { radius: rr(p, 24.0), width: 1.0, color: highlight(p) },
         ..Default::default()
     }
 }
 
 fn popup_style(p: Palette) -> container::Style {
+    if !p.glass {
+        let (w, c) = edge(p, 1.0, p.outline_variant);
+        return container::Style {
+            background: Some(Background::Color(p.popup.unwrap_or(p.surface_container))),
+            border: Border { radius: rr(p, 20.0), width: w, color: c },
+            shadow: if p.hard.is_some() { p.hard_shadow() } else { shadow(16.0, 40.0, if p.dark { 0.45 } else { 0.18 }) },
+            ..Default::default()
+        };
+    }
     container::Style {
         background: Some(Background::Color(alpha(p.surface_container, 0.96))),
-        border: Border { radius: radius(20.0), width: 1.0, color: highlight(p) },
+        border: Border { radius: rr(p, 20.0), width: 1.0, color: highlight(p) },
         shadow: shadow(16.0, 40.0, if p.dark { 0.45 } else { 0.18 }),
         ..Default::default()
     }
@@ -163,7 +218,7 @@ fn icon<'a>(p: Palette, glyph: &'a str, msg: Option<Message>) -> Element<'a, Mes
             button::Style {
                 background: bg,
                 text_color,
-                border: Border { radius: radius(TARGET / 2.0), width: if glassy { 1.0 } else { 0.0 }, color: glass_rim(p) },
+                border: Border { radius: rr(p, TARGET / 2.0), width: if glassy { p.w(1.0) } else { 0.0 }, color: glass_rim(p) },
                 ..Default::default()
             }
         })
@@ -181,7 +236,7 @@ fn flat(p: Palette, selected: bool) -> impl Fn(&Theme, button::Status) -> button
         } else {
             p.on_surface
         };
-        button::Style { background: state(p, base, s), text_color, border: Border { radius: radius(12.0), ..Default::default() }, ..Default::default() }
+        button::Style { background: state(p, base, s), text_color, border: Border { radius: rr(p, 12.0), ..Default::default() }, ..Default::default() }
     }
 }
 
@@ -193,11 +248,17 @@ fn filled(p: Palette) -> impl Fn(&Theme, button::Status) -> button::Style {
             button::Status::Pressed => mix(p.primary, p.on_primary, 0.12),
             _ => p.primary,
         };
+        let (w, c) = edge(p, 0.0, Color::TRANSPARENT);
         button::Style {
             background: Some(Background::Color(bg)),
             text_color: p.on_primary,
-            border: Border { radius: radius(20.0), ..Default::default() },
-            shadow: if s == button::Status::Hovered { shadow(2.0, 6.0, 0.2) } else { Shadow::default() },
+            border: Border { radius: rr(p, 20.0), width: w, color: c },
+            shadow: match (p.hard.is_some(), s) {
+                (true, button::Status::Pressed) => Shadow::default(),
+                (true, _) => p.hard_shadow(),
+                (false, button::Status::Hovered) => shadow(2.0, 6.0, 0.2),
+                _ => Shadow::default(),
+            },
             ..Default::default()
         }
     }
@@ -205,11 +266,15 @@ fn filled(p: Palette) -> impl Fn(&Theme, button::Status) -> button::Style {
 
 /// M3 tonal button (secondary actions).
 fn tonal(p: Palette) -> impl Fn(&Theme, button::Status) -> button::Style {
-    move |_: &Theme, s: button::Status| button::Style {
-        background: state(p, Some(p.secondary_container), s),
-        text_color: p.on_secondary_container,
-        border: Border { radius: radius(20.0), ..Default::default() },
-        ..Default::default()
+    move |_: &Theme, s: button::Status| {
+        let (w, c) = edge(p, 0.0, Color::TRANSPARENT);
+        button::Style {
+            background: state(p, Some(p.button.unwrap_or(p.secondary_container)), s),
+            text_color: p.button_text.unwrap_or(p.on_secondary_container),
+            border: Border { radius: rr(p, 20.0), width: w, color: c },
+            shadow: if p.hard.is_some() && s != button::Status::Pressed { p.hard_shadow() } else { Shadow::default() },
+            ..Default::default()
+        }
     }
 }
 
@@ -217,14 +282,17 @@ fn tonal(p: Palette) -> impl Fn(&Theme, button::Status) -> button::Style {
 fn field(p: Palette, inset: bool) -> impl Fn(&Theme, text_input::Status) -> text_input::Style {
     move |_: &Theme, s: text_input::Status| {
         let focused = matches!(s, text_input::Status::Focused { .. });
-        let (bg, edge) = if inset {
+        let (bg, rim) = if inset && !p.glass {
+            (p.field.unwrap_or(p.surface_lowest), edge(p, 1.0, p.outline_variant).1)
+        } else if inset {
             (alpha(p.surface_lowest, if p.dark { 0.55 } else { 0.65 }), alpha(p.outline_variant, 0.7))
         } else {
             (Color::TRANSPARENT, Color::TRANSPARENT)
         };
+        let width = if focused { p.w(1.0).max(2.0) } else if inset { p.w(1.0) } else { 0.0 };
         text_input::Style {
             background: Background::Color(bg),
-            border: Border { radius: radius(20.0), width: if focused { 2.0 } else if inset { 1.0 } else { 0.0 }, color: if focused { p.primary } else { edge } },
+            border: Border { radius: rr(p, 20.0), width, color: if focused { p.primary } else { rim } },
             icon: p.on_surface_variant,
             placeholder: p.on_surface_variant,
             value: p.on_surface,
@@ -244,7 +312,7 @@ fn chip<'a>(p: Palette, label: String, msg: Message, live: bool) -> Element<'a, 
         .style(move |_: &Theme, s: button::Status| button::Style {
             background: state(p, Some(if live { p.primary } else { p.secondary_container }), s),
             text_color: if live { p.on_primary } else { p.on_secondary_container },
-            border: Border { radius: radius(16.0), ..Default::default() },
+            border: Border { radius: rr(p, 16.0), width: p.edge, color: p.edge_color },
             ..Default::default()
         })
         .into()
@@ -261,7 +329,8 @@ pub fn view(b: &Browser) -> Element<'_, Message> {
     if b.find.is_some() {
         bar = bar.push(container(find_bar(b)).padding(Padding::from([0, 8])));
     }
-    let bar = container(column![bar, line(alpha(p.outline_variant, 0.7))]).style(move |_: &Theme| glass_bar(p));
+    let under = if p.edge > 0.0 { p.edge_color } else { alpha(p.outline_variant, 0.7) };
+    let bar = container(column![bar, rule(under, p.w(1.0))]).style(move |_: &Theme| glass_bar(p));
 
     let main = column![bar, content(b)];
     let base = container(main).width(Length::Fill).height(Length::Fill).style(move |_: &Theme| backdrop(p));
@@ -298,19 +367,19 @@ fn toast<'a>(b: &'a Browser, t: &str) -> Element<'a, Message> {
     let p = b.palette;
     let w = toast_width(t);
     let label = container(text(t.to_string()).size(14).color(p.on_surface).wrapping(iced::widget::text::Wrapping::None)).width(w).height(TOAST_H).center(Length::Fixed(w));
-    let face: Element<'a, Message> = match &b.glass_bg {
+    let face: Element<'a, Message> = match b.glass_bg.as_ref().filter(|_| p.glass) {
         Some(h) => stack![image(h.clone()).width(w).height(TOAST_H).content_fit(iced::ContentFit::Fill), label].into(),
         None => container(label)
             .style(move |_: &Theme| container::Style {
                 background: Some(Background::Color(alpha(p.surface_container, 0.96))),
-                border: Border { radius: radius(TOAST_H / 2.0), width: 1.0, color: glass_rim(p) },
+                border: Border { radius: rr(p, TOAST_H / 2.0), width: 1.0, color: glass_rim(p) },
                 ..Default::default()
             })
             .into(),
     };
     let pill = button(face).on_press(Message::DismissToast).padding(0).style(move |_: &Theme, _s| button::Style {
         background: None,
-        border: Border { radius: radius(TOAST_H / 2.0), width: 1.0, color: glass_rim(p) },
+        border: Border { radius: rr(p, TOAST_H / 2.0), width: 1.0, color: glass_rim(p) },
         shadow: shadow(8.0, 24.0, if p.dark { 0.45 } else { 0.18 }),
         ..Default::default()
     });
@@ -367,7 +436,7 @@ fn tab_strip(b: &Browser) -> Element<'_, Message> {
             .style(move |_: &Theme, s: button::Status| button::Style {
                 background: state(p, None, s),
                 text_color: p.on_surface_variant,
-                border: Border { radius: radius(11.0), ..Default::default() },
+                border: Border { radius: rr(p, 11.0), ..Default::default() },
                 ..Default::default()
             });
         let body = button(row![dot, label].spacing(6).align_y(Alignment::Center))
@@ -383,8 +452,9 @@ fn tab_strip(b: &Browser) -> Element<'_, Message> {
         // Liquid Glass: the selected tab is a glass pill with a rim.
         let pill = if active {
             pill.style(move |_: &Theme| container::Style {
-                background: Some(Background::Color(glass_strong(p))),
-                border: Border { radius: radius(16.0), width: 1.0, color: glass_rim(p) },
+                background: Some(Background::Color(p.tab.unwrap_or_else(|| glass_strong(p)))),
+                border: Border { radius: rr(p, 16.0), width: p.w(1.0), color: glass_rim(p) },
+                shadow: p.hard_shadow(),
                 ..Default::default()
             })
         } else {
@@ -427,8 +497,8 @@ fn toolbar(b: &Browser) -> Element<'_, Message> {
     // Liquid Glass: the address field is a glass capsule with a rim and a
     // specular line along its top.
     let capsule = container(pill).width(Length::Fill).height(TARGET).align_y(Alignment::Center).style(move |_: &Theme| container::Style {
-        background: Some(Background::Color(glass_strong(p))),
-        border: Border { radius: radius(TARGET / 2.0), width: 1.0, color: glass_rim(p) },
+        background: Some(Background::Color(p.field.unwrap_or_else(|| glass_strong(p)))),
+        border: Border { radius: rr(p, TARGET / 2.0), width: p.w(1.0), color: glass_rim(p) },
         ..Default::default()
     });
     let pill = stack![capsule, container(line(specular(p))).padding(Padding { top: 1.0, right: TARGET / 2.0, bottom: 0.0, left: TARGET / 2.0 })];
@@ -563,15 +633,15 @@ fn toast_width(t: &str) -> f32 {
 fn popup<'a>(b: &'a Browser, content: impl Into<Element<'a, Message>>, width: f32, height: f32) -> Element<'a, Message> {
     let p = b.palette;
     let rim = move |_: &Theme| container::Style {
-        border: Border { radius: radius(20.0), width: 1.0, color: glass_rim(p) },
+        border: Border { radius: rr(p, 20.0), width: 1.0, color: glass_rim(p) },
         shadow: shadow(16.0, 40.0, if p.dark { 0.45 } else { 0.18 }),
         ..Default::default()
     };
-    let body: Element<'a, Message> = match &b.glass_bg {
+    let body: Element<'a, Message> = match b.glass_bg.as_ref().filter(|_| p.glass) {
         Some(h) => stack![
             image(h.clone()).width(width).height(height).content_fit(iced::ContentFit::Fill),
             container(content).padding(8).width(width).height(height).style(move |_: &Theme| container::Style {
-                border: Border { radius: radius(20.0), width: 1.0, color: glass_rim(p) },
+                border: Border { radius: rr(p, 20.0), width: 1.0, color: glass_rim(p) },
                 ..Default::default()
             })
         ]
@@ -909,12 +979,47 @@ fn settings(b: &Browser) -> Element<'_, Message> {
                 .style(move |_: &Theme, st: button::Status| button::Style {
                     background: Some(Background::Color(if st == button::Status::Hovered { mix(c, Color::WHITE, 0.12) } else { c })),
                     text_color: Palette::new(hex, p.dark).on_primary,
-                    border: Border { radius: radius(17.0), width: if chosen { 2.0 } else { 1.0 }, color: if chosen { p.on_surface } else { highlight(p) } },
+                    border: Border { radius: rr(p, 17.0), width: if chosen { 2.0 } else { 1.0 }, color: if chosen { p.on_surface } else { highlight(p) } },
                     ..Default::default()
                 }),
         );
     }
-    let appearance = column![setting(p, "Dark mode", switch(s.dark, Message::SetDark)), setting(p, "Accent colour", swatches)].spacing(6);
+    // Styles: the accent palette, or a hypertheme (built-in or installed).
+    let mut styles = row![].spacing(8).align_y(Alignment::Center);
+    let mut options = vec![(String::new(), "Accent palette".to_string())];
+    options.extend(stonedgem_hypertheme::available());
+    for (file, name) in options {
+        let chosen = s.hypertheme == file;
+        styles = styles.push(
+            button(text(name).size(13))
+                .on_press(Message::SetHypertheme(file))
+                .padding(Padding::from([7, 14]))
+                .style(move |t: &Theme, st: button::Status| if chosen { filled(p)(t, st) } else { tonal(p)(t, st) }),
+        );
+    }
+    let mut appearance = column![setting(p, "Dark mode", switch(s.dark, Message::SetDark)), setting(p, "Style", styles)].spacing(6);
+    if s.hypertheme.is_empty() {
+        appearance = appearance.push(setting(p, "Accent colour", swatches));
+    } else if let Some(t) = &b.hyper {
+        let m = &t.theme.manifest;
+        let about = if m.description.is_empty() { format!("{} {}", m.name, m.version) } else { format!("{} {} — {}", m.name, m.version, m.description) };
+        appearance = appearance.push(text(about).size(13).color(p.on_surface_variant));
+        for w in &t.resolved.warnings {
+            appearance = appearance.push(text(format!("⚠ {w}")).size(13).color(p.error));
+        }
+    }
+    appearance = appearance.push(
+        row![
+            text_input("A .hypertheme file or folder", &b.hyper_path).on_input(Message::HyperPath).on_submit(Message::HyperInstall).padding(Padding::from([9, 16])).size(14).style(field(p, true)),
+            button(text("Install").size(14)).on_press(Message::HyperInstall).padding(Padding::from([9, 20])).style(filled(p)),
+            button(text("Open Theme Studio").size(14)).on_press(Message::OpenStudio).padding(Padding::from([9, 20])).style(tonal(p)),
+        ]
+        .spacing(8)
+        .align_y(Alignment::Center),
+    );
+    if !b.hyper_message.is_empty() {
+        appearance = appearance.push(text(b.hyper_message.clone()).size(13).color(p.on_surface_variant));
+    }
 
     let names: Vec<String> = stonedgem_url::ENGINES.iter().map(|e| e.name.to_string()).collect();
     let current = stonedgem_url::engine(&s.search).name.to_string();
