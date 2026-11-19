@@ -39,7 +39,7 @@ Nothing is described as working until its code and tests show it.
 - [Architecture](docs/ARCHITECTURE.md) — layers, the engine decision, Iced/Slint, extensions
 - [Migration plan](docs/MIGRATION.md) — how OyNIx moves over, phase by phase
 - [Compatibility](docs/COMPATIBILITY.md) — what works, what's planned, what isn't supported
-- [Z# and Z#++](docs/ZSHARP.md)
+- [Z#++](docs/ZSHARP.md) — summary; the full docs site is built from [`docs/zsharp/`](docs/zsharp/) with `cargo run -p stonedgem-zsharp-docs`
 - [GemSig plan](docs/GEMSIG-PLAN.md) — signature format 3 for `.poweroynix` (proposal)
 - [The original brief](prompt.md)
 

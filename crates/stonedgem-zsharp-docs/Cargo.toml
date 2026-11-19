@@ -1,0 +1,17 @@
+[package]
+name = "stonedgem-zsharp-docs"
+description = "Builds the Z#++ documentation site from docs/zsharp/, running every example."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "zsharp-docs"
+path = "src/main.rs"
+
+[dependencies]
+stonedgem-zsharp = { path = "../stonedgem-zsharp" }
+pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }

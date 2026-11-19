@@ -1,5 +1,10 @@
 # Z#++
 
+> The full documentation — guides, the Rust embedding API, how to modify the
+> language, and a reference — is a site built from [`docs/zsharp/`](zsharp/):
+> `cargo run -p stonedgem-zsharp-docs`, then open `target/zsharp-docs/index.html`.
+> This page is the one-page summary.
+
 **Z#++** is StonedGem's scripting language: [Sam-astro's Z-Sharp](https://github.com/sam-astro/Z-Sharp)
 (MIT) kept compatible — Z# programs run unchanged — and greatly extended,
 sandboxed for a browser. It lives in `crates/stonedgem-zsharp`, written in

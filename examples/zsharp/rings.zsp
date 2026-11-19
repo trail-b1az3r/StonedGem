@@ -1,0 +1,13 @@
+// Uses the GPU code in rings.zsg (docs/zsharp/gpu.md).
+import "rings.zsg"
+
+func Main() {
+    global let canvas = Canvas(480, 180)
+    canvas.shade(rings, 0, 0, 480, 180, { time: 0.8 })
+
+    let r = roots.run({ xs: [1, 4, 9, 16] })
+    Printl("roots: ${r.xs}")
+
+    let w = weigh.run({ values: [1, 2, 3], weights: [0.5, 0.5, 2], out: [0, 0, 0] }, { bias: 1 })
+    Printl("weighed: ${w.out}")
+}
