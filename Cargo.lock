@@ -12308,7 +12308,6 @@ dependencies = [
 [[package]]
 name = "zsharpend"
 version = "0.1.0"
-source = "git+https://github.com/trail-b1az3r/z-nd?rev=8442032c1d9f8203af71b997ba3c5cbc34369e82#8442032c1d9f8203af71b997ba3c5cbc34369e82"
 dependencies = [
  "naga",
  "tiny-skia 0.11.4",
