@@ -1,0 +1,603 @@
+{
+ "version": 1,
+ "nodes": [
+  {
+   "id": "cream",
+   "type": "color",
+   "x": 40,
+   "y": 40,
+   "props": {
+    "value": "#fff4dc"
+   }
+  },
+  {
+   "id": "ink",
+   "type": "color",
+   "x": 40,
+   "y": 130,
+   "props": {
+    "value": "#111111"
+   }
+  },
+  {
+   "id": "paper",
+   "type": "color",
+   "x": 40,
+   "y": 220,
+   "props": {
+    "value": "#ffffff"
+   }
+  },
+  {
+   "id": "pink",
+   "type": "color",
+   "x": 40,
+   "y": 310,
+   "props": {
+    "value": "#ff5c8a"
+   }
+  },
+  {
+   "id": "yellow",
+   "type": "color",
+   "x": 40,
+   "y": 400,
+   "props": {
+    "value": "#ffde59"
+   }
+  },
+  {
+   "id": "cyan",
+   "type": "color",
+   "x": 40,
+   "y": 490,
+   "props": {
+    "value": "#5ce1e6"
+   }
+  },
+  {
+   "id": "red",
+   "type": "color",
+   "x": 40,
+   "y": 580,
+   "props": {
+    "value": "#e63946"
+   }
+  },
+  {
+   "id": "alt",
+   "type": "mix",
+   "x": 300,
+   "y": 40,
+   "props": {
+    "t": 0.45
+   }
+  },
+  {
+   "id": "muted",
+   "type": "shade",
+   "x": 300,
+   "y": 170,
+   "props": {
+    "amount": 0.28
+   }
+  },
+  {
+   "id": "on_pink",
+   "type": "readable",
+   "x": 300,
+   "y": 280,
+   "props": {
+    "dark": "#111111",
+    "light": "#ffffff"
+   }
+  },
+  {
+   "id": "radius",
+   "type": "number",
+   "x": 300,
+   "y": 400,
+   "props": {
+    "value": 6
+   }
+  },
+  {
+   "id": "border",
+   "type": "number",
+   "x": 300,
+   "y": 480,
+   "props": {
+    "value": 3
+   }
+  },
+  {
+   "id": "shadow",
+   "type": "number",
+   "x": 300,
+   "y": 560,
+   "props": {
+    "value": 4
+   }
+  },
+  {
+   "id": "lift",
+   "type": "number",
+   "x": 300,
+   "y": 640,
+   "props": {
+    "value": 6
+   }
+  },
+  {
+   "id": "blur",
+   "type": "number",
+   "x": 300,
+   "y": 720,
+   "props": {
+    "value": 0
+   }
+  },
+  {
+   "id": "type",
+   "type": "font",
+   "x": 40,
+   "y": 700,
+   "props": {
+    "family": "Archivo Black, Arial Black, Helvetica, sans-serif",
+    "weight": 800
+   }
+  },
+  {
+   "id": "dots",
+   "type": "shader",
+   "x": 40,
+   "y": 820,
+   "props": {
+    "code": "// Neubrutalism: a dot grid on cream, with a hard-edged yellow block.\nfragment background(uv: vec2) -> color {\n    let cream = vec3(1.0, 0.957, 0.863)\n    let ink = vec3(0.067, 0.067, 0.067)\n    let yellow = vec3(1.0, 0.871, 0.349)\n    let cell = fract(uv * vec2(64.0, 36.0)) - vec2(0.5, 0.5)\n    let dot = smoothstep(0.17, 0.12, length(cell))\n    var c = mix(cream, ink, dot * 0.16)\n    let block = step(0.72, uv.x) * step(uv.y, 0.30)\n    let edge = step(0.715, uv.x) * step(uv.y, 0.305) - block\n    c = mix(c, yellow, block)\n    c = mix(c, ink, edge)\n    return vec4(c, 1.0)\n}\n"
+   }
+  },
+  {
+   "id": "p_toolbar",
+   "type": "panel",
+   "x": 580,
+   "y": 40,
+   "props": {
+    "panel": "toolbar"
+   }
+  },
+  {
+   "id": "p_tab",
+   "type": "panel",
+   "x": 580,
+   "y": 150,
+   "props": {
+    "panel": "tab"
+   }
+  },
+  {
+   "id": "p_card",
+   "type": "panel",
+   "x": 580,
+   "y": 260,
+   "props": {
+    "panel": "card"
+   }
+  },
+  {
+   "id": "p_button",
+   "type": "panel",
+   "x": 580,
+   "y": 370,
+   "props": {
+    "panel": "button"
+   }
+  },
+  {
+   "id": "p_field",
+   "type": "panel",
+   "x": 580,
+   "y": 480,
+   "props": {
+    "panel": "field"
+   }
+  },
+  {
+   "id": "p_popup",
+   "type": "panel",
+   "x": 580,
+   "y": 590,
+   "props": {
+    "panel": "popup"
+   }
+  },
+  {
+   "id": "light",
+   "type": "theme",
+   "x": 880,
+   "y": 40,
+   "props": {
+    "name": "Neubrutalism",
+    "author": "StonedGem",
+    "description": "Cream paper, loud colour, thick ink borders and hard offset shadows.",
+    "mode": "light",
+    "glass": false
+   }
+  },
+  {
+   "id": "d_bg",
+   "type": "color",
+   "x": 1160,
+   "y": 40,
+   "props": {
+    "value": "#18181b"
+   }
+  },
+  {
+   "id": "d_surface",
+   "type": "color",
+   "x": 1160,
+   "y": 130,
+   "props": {
+    "value": "#27272a"
+   }
+  },
+  {
+   "id": "d_alt",
+   "type": "color",
+   "x": 1160,
+   "y": 220,
+   "props": {
+    "value": "#3f3f46"
+   }
+  },
+  {
+   "id": "d_text",
+   "type": "color",
+   "x": 1160,
+   "y": 310,
+   "props": {
+    "value": "#fafafa"
+   }
+  },
+  {
+   "id": "d_muted",
+   "type": "color",
+   "x": 1160,
+   "y": 400,
+   "props": {
+    "value": "#d4d4d8"
+   }
+  },
+  {
+   "id": "dp_toolbar",
+   "type": "panel",
+   "x": 1160,
+   "y": 500,
+   "props": {
+    "panel": "toolbar"
+   }
+  },
+  {
+   "id": "dp_tab",
+   "type": "panel",
+   "x": 1160,
+   "y": 610,
+   "props": {
+    "panel": "tab"
+   }
+  },
+  {
+   "id": "dp_card",
+   "type": "panel",
+   "x": 1160,
+   "y": 720,
+   "props": {
+    "panel": "card"
+   }
+  },
+  {
+   "id": "dp_field",
+   "type": "panel",
+   "x": 1160,
+   "y": 830,
+   "props": {
+    "panel": "field"
+   }
+  },
+  {
+   "id": "dp_popup",
+   "type": "panel",
+   "x": 1160,
+   "y": 940,
+   "props": {
+    "panel": "popup"
+   }
+  },
+  {
+   "id": "dark",
+   "type": "theme",
+   "x": 1440,
+   "y": 40,
+   "props": {
+    "mode": "dark"
+   }
+  }
+ ],
+ "wires": [
+  {
+   "from": "cream",
+   "to": "alt",
+   "in": "a"
+  },
+  {
+   "from": "yellow",
+   "to": "alt",
+   "in": "b"
+  },
+  {
+   "from": "ink",
+   "to": "muted",
+   "in": "color"
+  },
+  {
+   "from": "pink",
+   "to": "on_pink",
+   "in": "on"
+  },
+  {
+   "from": "yellow",
+   "to": "p_toolbar",
+   "in": "fill"
+  },
+  {
+   "from": "paper",
+   "to": "p_tab",
+   "in": "fill"
+  },
+  {
+   "from": "paper",
+   "to": "p_card",
+   "in": "fill"
+  },
+  {
+   "from": "lift",
+   "to": "p_card",
+   "in": "shadow_x"
+  },
+  {
+   "from": "lift",
+   "to": "p_card",
+   "in": "shadow_y"
+  },
+  {
+   "from": "cyan",
+   "to": "p_button",
+   "in": "fill"
+  },
+  {
+   "from": "ink",
+   "to": "p_button",
+   "in": "text"
+  },
+  {
+   "from": "paper",
+   "to": "p_field",
+   "in": "fill"
+  },
+  {
+   "from": "paper",
+   "to": "p_popup",
+   "in": "fill"
+  },
+  {
+   "from": "lift",
+   "to": "p_popup",
+   "in": "shadow_x"
+  },
+  {
+   "from": "lift",
+   "to": "p_popup",
+   "in": "shadow_y"
+  },
+  {
+   "from": "cream",
+   "to": "light",
+   "in": "background"
+  },
+  {
+   "from": "paper",
+   "to": "light",
+   "in": "surface"
+  },
+  {
+   "from": "alt",
+   "to": "light",
+   "in": "surface_alt"
+  },
+  {
+   "from": "ink",
+   "to": "light",
+   "in": "text"
+  },
+  {
+   "from": "muted",
+   "to": "light",
+   "in": "muted"
+  },
+  {
+   "from": "pink",
+   "to": "light",
+   "in": "accent"
+  },
+  {
+   "from": "on_pink",
+   "to": "light",
+   "in": "on_accent"
+  },
+  {
+   "from": "ink",
+   "to": "light",
+   "in": "border"
+  },
+  {
+   "from": "red",
+   "to": "light",
+   "in": "danger"
+  },
+  {
+   "from": "ink",
+   "to": "light",
+   "in": "shadow"
+  },
+  {
+   "from": "radius",
+   "to": "light",
+   "in": "radius"
+  },
+  {
+   "from": "border",
+   "to": "light",
+   "in": "border_width"
+  },
+  {
+   "from": "shadow",
+   "to": "light",
+   "in": "shadow_x"
+  },
+  {
+   "from": "shadow",
+   "to": "light",
+   "in": "shadow_y"
+  },
+  {
+   "from": "blur",
+   "to": "light",
+   "in": "shadow_blur"
+  },
+  {
+   "from": "type",
+   "to": "light",
+   "in": "font"
+  },
+  {
+   "from": "dots",
+   "to": "light",
+   "in": "backdrop"
+  },
+  {
+   "from": "p_toolbar",
+   "to": "light",
+   "in": "panels"
+  },
+  {
+   "from": "p_tab",
+   "to": "light",
+   "in": "panels"
+  },
+  {
+   "from": "p_card",
+   "to": "light",
+   "in": "panels"
+  },
+  {
+   "from": "p_button",
+   "to": "light",
+   "in": "panels"
+  },
+  {
+   "from": "p_field",
+   "to": "light",
+   "in": "panels"
+  },
+  {
+   "from": "p_popup",
+   "to": "light",
+   "in": "panels"
+  },
+  {
+   "from": "d_surface",
+   "to": "dp_toolbar",
+   "in": "fill"
+  },
+  {
+   "from": "d_bg",
+   "to": "dp_tab",
+   "in": "fill"
+  },
+  {
+   "from": "d_surface",
+   "to": "dp_card",
+   "in": "fill"
+  },
+  {
+   "from": "d_bg",
+   "to": "dp_field",
+   "in": "fill"
+  },
+  {
+   "from": "d_surface",
+   "to": "dp_popup",
+   "in": "fill"
+  },
+  {
+   "from": "d_bg",
+   "to": "dark",
+   "in": "background"
+  },
+  {
+   "from": "d_surface",
+   "to": "dark",
+   "in": "surface"
+  },
+  {
+   "from": "d_alt",
+   "to": "dark",
+   "in": "surface_alt"
+  },
+  {
+   "from": "d_text",
+   "to": "dark",
+   "in": "text"
+  },
+  {
+   "from": "d_muted",
+   "to": "dark",
+   "in": "muted"
+  },
+  {
+   "from": "d_text",
+   "to": "dark",
+   "in": "border"
+  },
+  {
+   "from": "d_text",
+   "to": "dark",
+   "in": "shadow"
+  },
+  {
+   "from": "dp_toolbar",
+   "to": "dark",
+   "in": "panels"
+  },
+  {
+   "from": "dp_tab",
+   "to": "dark",
+   "in": "panels"
+  },
+  {
+   "from": "dp_card",
+   "to": "dark",
+   "in": "panels"
+  },
+  {
+   "from": "dp_field",
+   "to": "dark",
+   "in": "panels"
+  },
+  {
+   "from": "dp_popup",
+   "to": "dark",
+   "in": "panels"
+  }
+ ]
+}

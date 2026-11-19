@@ -1,0 +1,4 @@
+// Neubrutalism for Z#++ hosts (OyNIx): the muted text colour per mode.
+func tokens(dark) {
+    return { muted: dark ? #d4d4d8 : #545454 }
+}

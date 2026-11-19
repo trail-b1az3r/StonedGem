@@ -10,6 +10,7 @@ pub mod downloads;
 pub mod exthub;
 pub mod find;
 pub mod glass;
+pub mod hyper;
 pub mod palette;
 pub mod panels;
 pub mod session;

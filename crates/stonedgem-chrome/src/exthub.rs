@@ -35,6 +35,8 @@ pub enum Effect {
     BlockerChanged,
     /// Set a property of an extension's panel: (extension, property, value).
     PanelSet(String, String, Json),
+    /// Use an installed hypertheme (its file name).
+    ApplyHypertheme(String),
 }
 
 pub struct Background {
@@ -201,7 +203,7 @@ impl ExtHub {
                     let req = body["req"].as_str().unwrap_or("").to_string();
                     let op = body["op"].as_str().unwrap_or("");
                     let r = match op {
-                        "sendMessage" => match zs.message(&id, bridge::from_json(&body["message"]), &url) {
+                        "sendMessage" => match zs.message(&id, body["message"].clone(), &url) {
                             Some((r, actions)) => {
                                 for a in actions {
                                     fx.push(match a {
@@ -209,9 +211,10 @@ impl ExtHub {
                                         Action::Css(css) => Effect::RunJs(ti, css_js(&css)),
                                         Action::Notify(n) => Effect::Notify(n),
                                         Action::PanelSet(k, v) => Effect::PanelSet(id.clone(), k, v),
+                                        Action::ApplyHypertheme(f) => Effect::ApplyHypertheme(f),
                                     });
                                 }
-                                r.map(|v| bridge::to_json(&v))
+                                r
                             }
                             None => Err("this extension has nothing listening for messages (no script.zsp)".into()),
                         },

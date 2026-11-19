@@ -22,6 +22,8 @@ stonedgem-profile = { path = "../stonedgem-profile" }
 stonedgem-theme = { path = "../stonedgem-theme" }
 stonedgem-extensions = { path = "../stonedgem-extensions" }
 stonedgem-zsharp = { path = "../stonedgem-zsharp" }
+stonedgem-hypertheme = { path = "../stonedgem-hypertheme" }
+zsharpend = { git = "https://github.com/trail-b1az3r/z-nd", rev = "8442032c1d9f8203af71b997ba3c5cbc34369e82" }
 # Extension panels (`panel.slint`): interpreted, drawn by Slint's software renderer
 # into a buffer the window shows.
 slint-interpreter = { version = "=1.17.0", default-features = false, features = ["std", "compat-1-2", "renderer-software"] }

@@ -9450,12 +9450,14 @@ dependencies = [
  "stonedgem-blocker",
  "stonedgem-engine",
  "stonedgem-extensions",
+ "stonedgem-hypertheme",
  "stonedgem-library",
  "stonedgem-profile",
  "stonedgem-theme",
  "stonedgem-url",
  "stonedgem-zsharp",
  "ureq",
+ "zsharpend",
 ]
 
 [[package]]
@@ -9487,6 +9489,7 @@ dependencies = [
  "stonedgem-theme",
  "stonedgem-zsharp",
  "zip",
+ "zsharpend",
 ]
 
 [[package]]

@@ -1,0 +1,435 @@
+// Theme Studio: turns the node graph drawn on extra.html into a
+// .hypertheme. The page sends the graph with chrome.runtime.sendMessage;
+// `on message` answers. `generate(graph)` is pure, so the build checks
+// that the built-in Neubrutalism theme still comes out of its graph.json.
+
+const COLOR_TOKENS = ["background", "surface", "surface_alt", "text", "muted", "accent", "on_accent", "border", "danger", "shadow"]
+const NUMBER_TOKENS = ["radius", "border_width", "shadow_x", "shadow_y", "shadow_blur"]
+const PANELS = ["toolbar", "tab", "card", "button", "field", "popup"]
+const PANEL_COLORS = ["fill", "text", "border"]
+const PANEL_NUMBERS = ["radius", "border_width", "shadow_x", "shadow_y"]
+const HEX = "0123456789abcdef"
+
+// ── Colours (as "#rrggbb" text) ──────────────────────────────────────────
+
+fn hex_digit(c) {
+    let i = index_of(chars(HEX), lower(c))
+    return i == null ? 0 : i
+}
+
+fn parse_hex(s) {
+    let h = lower(trim(str(s)))
+    if starts_with(h, "#") { h = h[1:] }
+    if len(h) == 3 { h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2] }
+    if len(h) < 6 { return [0, 0, 0] }
+    return [hex_digit(h[i]) * 16 + hex_digit(h[i + 1]) for i in [0, 2, 4]]
+}
+
+fn to_hex(rgb) {
+    let c = [int(clamp(round(x), 0, 255)) for x in rgb]
+    return format("#%02x%02x%02x", c[0], c[1], c[2])
+}
+
+fn mix_hex(a, b, t) {
+    let x = parse_hex(a)
+    let y = parse_hex(b)
+    return to_hex([x[i] + (y[i] - x[i]) * t for i in 3])
+}
+
+fn hsl_hex(h, s, l) {
+    let hh = ((h % 360) + 360) % 360 / 60.0
+    let c = (1 - abs(2 * l - 1)) * s
+    let x = c * (1 - abs(hh % 2 - 1))
+    let m = l - c / 2
+    let rgb = match int(floor(hh)) {
+        0 => [c, x, 0],
+        1 => [x, c, 0],
+        2 => [0, c, x],
+        3 => [0, x, c],
+        4 => [x, 0, c],
+        _ => [c, 0, x],
+    }
+    return to_hex([(v + m) * 255 for v in rgb])
+}
+
+fn luminance(h) {
+    let lin = |v| {
+        let s = v / 255.0
+        return s <= 0.03928 ? s / 12.92 : pow((s + 0.055) / 1.055, 2.4)
+    }
+    let c = parse_hex(h)
+    return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2])
+}
+
+fn contrast(a, b) {
+    let x = luminance(a)
+    let y = luminance(b)
+    return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+}
+
+// ── Evaluating the graph ─────────────────────────────────────────────────
+
+fn find_node(graph, id) {
+    for n in graph["nodes"] {
+        if n["id"] == id { return n }
+    }
+    return null
+}
+
+// What's wired into `port` of node `id`: the values, in wire order.
+fn inputs(graph, id, port, seen) {
+    let out = []
+    for w in get(graph, "wires", []) {
+        if w["to"] == id && w["in"] == port {
+            let v = value(graph, w["from"], seen)
+            if v != null { push(out, v) }
+        }
+    }
+    return out
+}
+
+fn input(graph, id, port, seen) {
+    let vs = inputs(graph, id, port, seen)
+    return len(vs) == 0 ? null : vs[0]
+}
+
+fn prop(n, k, d) {
+    return get(get(n, "props", {}), k, d)
+}
+
+fn num(v, d) {
+    return v == null ? d : float(v)
+}
+
+// A node's output value. `seen` guards against loops in the wiring.
+fn value(graph, id, seen) {
+    if contains(seen, id) { throw "the wires loop back to node ${id}" }
+    if len(seen) > 64 { throw "the graph is too deep" }
+    let n = find_node(graph, id)
+    if n == null { return null }
+    let s = seen + [id]
+    let kind = n["type"]
+    return match kind {
+        "color" => to_hex(parse_hex(prop(n, "value", "#000000"))),
+        "hsl" => hsl_hex(num(prop(n, "h", 0), 0), num(prop(n, "s", 0.5), 0.5), num(prop(n, "l", 0.5), 0.5)),
+        "mix" => {
+            let a = input(graph, id, "a", s)
+            let b = input(graph, id, "b", s)
+            if a == null || b == null { return a == null ? b : a }
+            return mix_hex(a, b, num(prop(n, "t", 0.5), 0.5))
+        },
+        "shade" => {
+            let c = input(graph, id, "color", s)
+            if c == null { return null }
+            let t = num(prop(n, "amount", 0), 0)
+            return t >= 0 ? mix_hex(c, "#ffffff", t) : mix_hex(c, "#000000", -t)
+        },
+        "readable" => {
+            // Black or white, whichever reads better on the colour wired in.
+            let bg = input(graph, id, "on", s)
+            if bg == null { return "#000000" }
+            let dark = prop(n, "dark", "#111111")
+            let light = prop(n, "light", "#ffffff")
+            return contrast(dark, bg) >= contrast(light, bg) ? dark : light
+        },
+        "number" => num(prop(n, "value", 0), 0),
+        "font" => {
+            return { family: prop(n, "family", "sans-serif"), weight: num(prop(n, "weight", 400), 400) }
+        },
+        "shader" => {
+            return { shader: prop(n, "code", "") }
+        },
+        "panel" => {
+            let p = {}
+            for k in PANEL_COLORS + PANEL_NUMBERS {
+                let v = input(graph, id, k, s)
+                if v == null { v = prop(n, k, null) }
+                if v != null { p[k] = v }
+            }
+            return { panel: prop(n, "panel", "card"), style: p }
+        },
+        _ => null,
+    }
+}
+
+// The tokens and panels one theme node gives.
+fn theme_tokens(graph, t) {
+    let id = t["id"]
+    let tokens = {}
+    let panels = {}
+    for k in COLOR_TOKENS + NUMBER_TOKENS {
+        let v = input(graph, id, k, [id])
+        if v != null { tokens[k] = v }
+    }
+    let f = input(graph, id, "font", [id])
+    if f != null {
+        tokens["font_family"] = f["family"]
+        tokens["font_weight"] = f["weight"]
+    }
+    if prop(t, "mode", "light") == "light" {
+        tokens["glass"] = prop(t, "glass", false) == true
+    }
+    for p in inputs(graph, id, "panels", [id]) {
+        if contains(PANELS, p["panel"]) { panels[p["panel"]] = p["style"] }
+    }
+    let bg = input(graph, id, "backdrop", [id])
+    return { tokens: tokens, panels: panels, shader: bg == null ? "" : bg["shader"] }
+}
+
+fn evaluate(graph) {
+    let light = null
+    let dark = null
+    for n in graph["nodes"] {
+        if n["type"] == "theme" {
+            if prop(n, "mode", "light") == "dark" { dark = n } else { light = n }
+        }
+    }
+    if light == null { throw "the graph needs a Theme node (mode: light)" }
+    let l = theme_tokens(graph, light)
+    let d = dark == null ? { tokens: {}, panels: {}, shader: "" } : theme_tokens(graph, dark)
+    return {
+        name: prop(light, "name", "Untitled"),
+        author: prop(light, "author", ""),
+        description: prop(light, "description", ""),
+        light: l,
+        dark: d,
+    }
+}
+
+// ── Writing the parts ────────────────────────────────────────────────────
+
+fn q(s) {
+    return "\"" + replace(replace(str(s), "\\", "\\\\"), "\"", "\\\"") + "\""
+}
+
+fn fmt_num(v) {
+    let f = float(v)
+    return f == floor(f) ? str(int(f)) : format("%g", f)
+}
+
+fn f32_lit(v) {
+    let s = fmt_num(v)
+    return contains(chars(s), ".") ? s : s + ".0"
+}
+
+fn rgb_call(h) {
+    let c = parse_hex(h)
+    return format("rgb(%d, %d, %d)", c[0], c[1], c[2])
+}
+
+fn json_value(v) {
+    return match type(v) {
+        "str" | "string" => q(v),
+        "bool" => v ? "true" : "false",
+        "int" | "float" => fmt_num(v),
+        _ => q(str(v)),
+    }
+}
+
+fn json_map(m, indent) {
+    let pad = repeat(" ", indent)
+    let lines = []
+    for k in sort(keys(m)) {
+        let v = m[k]
+        let text = type(v) == "map" ? json_map(v, indent + 2) : json_value(v)
+        push(lines, pad + "  " + q(k) + ": " + text)
+    }
+    if len(lines) == 0 { return "{}" }
+    return "{\n" + join(lines, ",\n") + "\n" + pad + "}"
+}
+
+fn hypertheme_toml(t) {
+    let modes = len(t["dark"]["tokens"]) > 0 ? "both" : "light"
+    return "[hypertheme]\nname = ${q(t["name"])}\nversion = \"1.0.0\"\nauthor = ${q(t["author"])}\ndescription = ${q(t["description"])}\nmodes = \"${modes}\"\n"
+}
+
+// tokens.json: the light colours.
+fn tokens_json(t) {
+    let m = {}
+    for k in COLOR_TOKENS {
+        if has(t["light"]["tokens"], k) { m[k] = t["light"]["tokens"][k] }
+    }
+    return json_map(m, 0) + "\n"
+}
+
+// style.rs: shape and type as basic Rust constants, dark colours in `mod dark`.
+fn style_rs(t) {
+    let lt = t["light"]["tokens"]
+    let out = ["// ${t["name"]}: shape and type, written by Theme Studio.", "// Basic Rust: constants only; StonedGem reads it, nothing compiles it.", ""]
+    for k in NUMBER_TOKENS + ["font_weight"] {
+        if has(lt, k) { push(out, "pub const ${upper(k)}: f32 = ${f32_lit(lt[k])};") }
+    }
+    if has(lt, "glass") { push(out, "pub const GLASS: bool = ${lt["glass"] ? "true" : "false"};") }
+    if has(lt, "font_family") { push(out, "pub const FONT_FAMILY: &str = ${q(lt["font_family"])};") }
+    let dt = t["dark"]["tokens"]
+    let dark = [k for k in COLOR_TOKENS if has(dt, k)]
+    if len(dark) > 0 {
+        push(out, "")
+        push(out, "pub mod dark {")
+        for k in dark { push(out, "    pub const ${upper(k)}: Color = ${rgb_call(dt[k])};") }
+        push(out, "}")
+    }
+    return join(out, "\n") + "\n"
+}
+
+// theme.zxx and theme.zsp: colours worked out per mode, as code. In dark
+// mode the danger colour is lifted toward white so it still reads.
+fn theme_zxx(t) {
+    let danger = get(t["light"]["tokens"], "danger", "#e63946")
+    return join([
+        "// ${t["name"]}: colours worked out in Zsharpend (Theme Studio).",
+        "fn tokens(dark) {",
+        "    let danger = ${danger}",
+        "    return { danger: dark ? mix(danger, #ffffff, 0.25) : danger }",
+        "}",
+        "",
+    ], "\n")
+}
+
+fn theme_zsp(t) {
+    let lt = t["light"]["tokens"]
+    let dt = t["dark"]["tokens"]
+    return join([
+        "// ${t["name"]} for Z#++ hosts (OyNIx): the muted text colour per mode.",
+        "func tokens(dark) {",
+        "    return { muted: dark ? ${get(dt, "muted", get(lt, "muted", "#888888"))} : ${get(lt, "muted", "#555555")} }",
+        "}",
+        "",
+    ], "\n")
+}
+
+// iced.toml: the window's panels, `[dark.*]` for dark mode.
+fn iced_toml(t) {
+    let out = ["# ${t["name"]}: the Iced window's panels (Theme Studio)."]
+    for (prefix, part) in [["", t["light"]], ["dark.", t["dark"]]] {
+        for p in PANELS {
+            if !has(part["panels"], p) { continue }
+            let style = part["panels"][p]
+            push(out, "")
+            push(out, "[${prefix}${p}]")
+            for k in sort(keys(style)) { push(out, "${k} = ${json_value(style[k])}") }
+        }
+    }
+    return join(out, "\n") + "\n"
+}
+
+fn pages_css(t) {
+    let lt = t["light"]["tokens"]
+    let hard = get(lt, "shadow_x", 0) != 0 || get(lt, "shadow_y", 0) != 0
+    let lines = [
+        "/* ${t["name"]}: extra page styles (Theme Studio). */",
+        "::selection { background: var(--ht-accent); color: var(--ht-on-accent); }",
+        "a { color: var(--ht-text); text-decoration-thickness: 3px; text-decoration-color: var(--ht-accent); }",
+        "h1, h2, h3 { letter-spacing: -0.02em; }",
+    ]
+    if hard {
+        push(lines, ".ht-button, .ht-card { transition: transform .08s, box-shadow .08s; }")
+        push(lines, ".ht-button:hover, .ht-card:hover { transform: translate(-2px, -2px); box-shadow: calc(var(--ht-shadow-x) + 2px) calc(var(--ht-shadow-y) + 2px) 0 var(--ht-shadow); }")
+        push(lines, ".ht-button:active { transform: translate(var(--ht-shadow-x), var(--ht-shadow-y)); box-shadow: none; }")
+    }
+    return join(lines, "\n") + "\n"
+}
+
+fn start_tsx(t) {
+    return join([
+        "// ${t["name"]}: the start page (Theme Studio). `theme` and `oynix` are globals.",
+        "export default function Start() {",
+        "  const tiles = [\"accent\", \"surface_alt\", \"background\", \"text\"];",
+        "  return (",
+        "    <main class=\"ht-start\">",
+        "      <section class=\"ht-card hero\">",
+        "        <h1>{theme.product}</h1>",
+        "        <p>Type an address or a search in the bar above.</p>",
+        "        <div class=\"swatches\">",
+        "          {tiles.map((k) => <span class=\"ht-button\" style={\"background:\" + theme.tokens[k]}>{k}</span>)}",
+        "        </div>",
+        "      </section>",
+        "      <p class=\"made\">{theme.name}, made in Theme Studio</p>",
+        "    </main>",
+        "  );",
+        "}",
+        "",
+    ], "\n")
+}
+
+fn camel(k) {
+    return join([i == 0 ? w : upper(w[0]) + w[1:] for (i, w) in enumerate(split(k, "_"))], "")
+}
+
+fn chrome_qml(t) {
+    let lt = t["light"]["tokens"]
+    let dt = t["dark"]["tokens"]
+    let out = ["// ${t["name"]} for OyNIx's Qt chrome (Theme Studio).", "import QtQuick", "", "QtObject {", "    property bool dark: false"]
+    for k in COLOR_TOKENS {
+        if has(lt, k) {
+            let d = get(dt, k, lt[k])
+            let name = camel(k)
+            push(out, "    property color ${name}: dark ? ${q(d)} : ${q(lt[k])}")
+        }
+    }
+    for k in NUMBER_TOKENS {
+        if has(lt, k) {
+            let name = camel(k)
+            push(out, "    property real ${name}: ${fmt_num(lt[k])}")
+        }
+    }
+    if has(lt, "font_family") { push(out, "    property string fontFamily: ${q(lt["font_family"])}") }
+    push(out, "}")
+    return join(out, "\n") + "\n"
+}
+
+// Every part of the .hypertheme, by file name.
+fn generate(graph) {
+    let t = evaluate(graph)
+    let files = {
+        "hypertheme.toml": hypertheme_toml(t),
+        "tokens.json": tokens_json(t),
+        "style.rs": style_rs(t),
+        "theme.zxx": theme_zxx(t),
+        "theme.zsp": theme_zsp(t),
+        "iced.toml": iced_toml(t),
+        "pages.css": pages_css(t),
+        "start.tsx": start_tsx(t),
+        "chrome.qml": chrome_qml(t),
+    }
+    if t["light"]["shader"] != "" { files["background.zsg"] = t["light"]["shader"] }
+    return { name: t["name"], files: files }
+}
+
+// What every node gives (the page shows colours and numbers on the nodes).
+fn node_values(graph) {
+    let out = {}
+    for n in graph["nodes"] {
+        if n["type"] == "theme" { continue }
+        try {
+            let v = value(graph, n["id"], [])
+            if type(v) == "string" || type(v) == "float" || type(v) == "int" { out[n["id"]] = v }
+        } catch e {}
+    }
+    return out
+}
+
+// ── The page's requests ──────────────────────────────────────────────────
+
+on message (msg, sender) {
+    let kind = get(msg, "kind", "")
+    if kind == "shader" {
+        return { image: zsg_preview(msg["code"], 160, 96) }
+    }
+    if kind == "list" {
+        return { themes: hypertheme_list() }
+    }
+    let out = generate(msg["graph"])
+    let files = out["files"]
+    if kind == "compile" {
+        let preview = hypertheme_resolve(files, get(msg, "dark", false) == true)
+        return { name: out["name"], files: files, css: preview["css"], tokens: preview["tokens"], warnings: preview["warnings"], values: node_values(msg["graph"]) }
+    }
+    files["graph.json"] = to_json(msg["graph"])
+    let file = hypertheme_save(out["name"], files)
+    if kind == "apply" {
+        hypertheme_apply(file)
+        notify("Theme Studio: using ${out["name"]}")
+    }
+    return { file: file }
+}

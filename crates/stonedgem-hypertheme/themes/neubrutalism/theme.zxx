@@ -1,0 +1,5 @@
+// Neubrutalism: colours worked out in Zsharpend (Theme Studio).
+fn tokens(dark) {
+    let danger = #e63946
+    return { danger: dark ? mix(danger, #ffffff, 0.25) : danger }
+}

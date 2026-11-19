@@ -11,7 +11,7 @@
 //! | `style.rs` | tokens as **basic Rust** constants (`pub const ACCENT: Color = rgb(255, 222, 89);`, a `mod dark { … }` for dark mode) |
 //! | `theme.zsp` | a **Z#++** program: `func tokens(dark)` returns a map of tokens |
 //! | `theme.zxx` | a **Zsharpend** program: `fn tokens(dark)` returns a map of tokens |
-//! | `iced.toml` | the Iced window's panels: `[toolbar] fill = "#…" border_width = 3 …` |
+//! | `iced.toml` | the Iced window's panels: `[toolbar] fill = "#…" border_width = 3 …` (`[dark.toolbar]` for dark mode) |
 //! | `pages.css` | CSS for the start page and extension pages (after the generated `--ht-*` variables) |
 //! | `start.tsx` | a **TSX** start page (`export default function Start() { … }`) |
 //! | `chrome.qml` | **QML** for OyNIx (a `Theme` override) |
@@ -182,8 +182,10 @@ impl Hypertheme {
         }
         if let Some(t) = self.files.get("iced.toml") {
             if let Ok(tb) = toml::from_str::<toml::Table>(t) {
-                let v = serde_json::to_value(&tb).unwrap_or(Json::Null);
-                layers.push(("iced.toml".into(), json!({ "panels": v })));
+                // `[card]` styles a panel; `[dark.card]` styles it in dark mode.
+                let mut v = serde_json::to_value(&tb).unwrap_or(Json::Null);
+                let dark = v.as_object_mut().and_then(|o| o.remove("dark")).unwrap_or(json!({}));
+                layers.push(("iced.toml".into(), json!({ "panels": v, "dark": { "panels": dark } })));
             }
         }
         for (_, layer) in &layers {
@@ -585,4 +587,60 @@ pub fn installed() -> Vec<(String, String)> {
         .collect();
     v.sort_by(|a, b| a.1.cmp(&b.1));
     v
+}
+
+// ── Built-in hyperthemes ───────────────────────────────────────────────
+
+/// Hyperthemes that ship with the browser, by file name. Neubrutalism was
+/// made in Theme Studio: `graph.json` is its node graph, and every other
+/// part is what the Studio's `script.zxx` generated from it.
+pub fn builtins() -> Vec<(String, Hypertheme)> {
+    macro_rules! theme {
+        ($dir:literal, [$($f:literal),*]) => {{
+            let files: BTreeMap<String, String> = [$(($f.to_string(), include_str!(concat!("../themes/", $dir, "/", $f)).to_string())),*].into_iter().collect();
+            (format!("{}.hypertheme", $dir), Hypertheme::from_files(files).expect(concat!("built-in hypertheme ", $dir)))
+        }};
+    }
+    vec![theme!("neubrutalism", ["hypertheme.toml", "tokens.json", "style.rs", "theme.zxx", "theme.zsp", "iced.toml", "pages.css", "start.tsx", "chrome.qml", "background.zsg", "graph.json"])]
+}
+
+/// An installed or built-in hypertheme by file name (installed ones win).
+pub fn load(file: &str) -> Result<Hypertheme, String> {
+    if file.is_empty() || file.contains(['/', '\\']) || file.starts_with('.') {
+        return Err(format!("“{file}” isn't a hypertheme file name"));
+    }
+    let path = dir().join(file);
+    if path.exists() {
+        return Hypertheme::open(&path);
+    }
+    builtins().into_iter().find(|(f, _)| f == file).map(|(_, h)| h).ok_or(format!("no hypertheme “{file}”"))
+}
+
+/// Installed and built-in hyperthemes: (file name, name), built-ins first.
+pub fn available() -> Vec<(String, String)> {
+    let mine = installed();
+    let mut v: Vec<(String, String)> = builtins().into_iter().filter(|(f, _)| !mine.iter().any(|(m, _)| m == f)).map(|(f, h)| (f, h.manifest.name)).collect();
+    v.extend(mine);
+    v
+}
+
+// ── Theme Studio ───────────────────────────────────────────────────────
+
+/// The Theme Studio power extension's files, ready to install: its node
+/// editor page, its Zsharpend script, and the Neubrutalism graph as the
+/// page's template.
+pub fn studio_files() -> Vec<(&'static str, String)> {
+    let graph = include_str!("../themes/neubrutalism/graph.json").trim();
+    vec![
+        ("oynix.json", include_str!("../studio/oynix.json").to_string()),
+        ("code.ts", include_str!("../studio/code.ts").to_string()),
+        ("content.css", include_str!("../studio/content.css").to_string()),
+        ("script.zxx", include_str!("../studio/script.zxx").to_string()),
+        ("extra.html", include_str!("../studio/extra.html").replace("/*NEUBRUTALISM_GRAPH*/null", &graph.replace("</", "<\\/"))),
+    ]
+}
+
+/// The Studio's version (from its `oynix.json`), to reinstall it when it changes.
+pub fn studio_version() -> String {
+    serde_json::from_str::<Json>(include_str!("../studio/oynix.json")).ok().and_then(|v| v["version"].as_str().map(String::from)).unwrap_or_default()
 }

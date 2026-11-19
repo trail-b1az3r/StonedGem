@@ -19,6 +19,7 @@ services already moved out of OyNIx — and OyNIx uses them:
 | [`stonedgem-extensions`](crates/stonedgem-extensions) | Extension packages: Chrome/Firefox MV2/MV3, `.oynix`, `.poweroynix`, TypeScript/TSX, widgets |
 | [`stonedgem-chrome`](crates/stonedgem-chrome) | The browser window (Iced): tabs, address bar, menu, History, Bookmarks, Settings, find in page; `cargo run -p stonedgem-chrome` |
 | [`stonedgem-zsharp`](crates/stonedgem-zsharp) | **Z#++**: Z#-compatible scripting with `.zsp` programs, `.zsx` headers, `.zsg` GPU kernels/shaders (WGSL), 2D canvas, sandbox; `zspp` tool — see [docs/ZSHARP.md](docs/ZSHARP.md) |
+| [`stonedgem-hypertheme`](crates/stonedgem-hypertheme) | **`.hypertheme`**: whole-UI themes from tokens, basic Rust, Z#++, Zsharpend, TOML, CSS, TSX, QML and a shader; Theme Studio (a node editor, built in as a power extension) and the Neubrutalism theme made with it — see [docs/HYPERTHEME.md](docs/HYPERTHEME.md) |
 | [`stonedgem-theme`](crates/stonedgem-theme) | Material 3 colour schemes from one accent colour (the window's and extension themes') |
 | [`stonedgem-engine`](crates/stonedgem-engine) | Servo behind StonedGem's own types, with the blocker on every request (spike; `cargo test -p stonedgem-engine`) |
 
@@ -39,6 +40,7 @@ Nothing is described as working until its code and tests show it.
 - [Architecture](docs/ARCHITECTURE.md) — layers, the engine decision, Iced/Slint, extensions
 - [Migration plan](docs/MIGRATION.md) — how OyNIx moves over, phase by phase
 - [Compatibility](docs/COMPATIBILITY.md) — what works, what's planned, what isn't supported
+- [Hyperthemes and Theme Studio](docs/HYPERTHEME.md) — the `.hypertheme` format, the node editor, Neubrutalism
 - [Z#++](docs/ZSHARP.md) — summary; the full docs site is built from [`docs/zsharp/`](docs/zsharp/) with `cargo run -p stonedgem-zsharp-docs`
 - [GemSig plan](docs/GEMSIG-PLAN.md) — signature format 3 for `.poweroynix` (proposal)
 - [The original brief](prompt.md)

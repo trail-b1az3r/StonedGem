@@ -19,3 +19,5 @@ stonedgem-profile = { path = "../stonedgem-profile" }
 stonedgem-poweroynix = { path = "../stonedgem-poweroynix" }
 stonedgem-theme = { path = "../stonedgem-theme" }
 stonedgem-zsharp = { path = "../stonedgem-zsharp" }
+# Zsharpend (.zxx) extension scripts.
+zsharpend = { git = "https://github.com/trail-b1az3r/z-nd", rev = "8442032c1d9f8203af71b997ba3c5cbc34369e82" }
