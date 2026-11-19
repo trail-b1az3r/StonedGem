@@ -1111,7 +1111,8 @@ pub fn compile_widget(dir: &Path) -> Result<String, String> {
 /// `Fragment`, `useState`, `useEffect`, `render`, plus `oynix` (the
 /// extension's id and extra.jsonl data). Re-rendering rebuilds the DOM;
 /// widgets are small, so that's simple and fast enough.
-const WIDGET_RUNTIME: &str = r#"
+/// The tiny React-like runtime `widget.tsx` (and hypertheme `start.tsx`) run on.
+pub const WIDGET_RUNTIME: &str = r#"
 var Fragment = { fragment: true };
 var __w = { root: null, el: null, states: [], effects: [], i: 0, e: 0, queued: false };
 function h(type, props) {

@@ -9490,6 +9490,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "stonedgem-hypertheme"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "stonedgem-extensions",
+ "stonedgem-profile",
+ "stonedgem-zsharp",
+ "toml 0.9.12+spec-1.1.0",
+ "zip",
+ "zsharpend",
+]
+
+[[package]]
 name = "stonedgem-library"
 version = "0.1.0"
 dependencies = [
@@ -12286,6 +12300,15 @@ dependencies = [
  "crc32fast",
  "log",
  "simd-adler32",
+]
+
+[[package]]
+name = "zsharpend"
+version = "0.1.0"
+source = "git+https://github.com/trail-b1az3r/z-nd?rev=8442032c1d9f8203af71b997ba3c5cbc34369e82#8442032c1d9f8203af71b997ba3c5cbc34369e82"
+dependencies = [
+ "naga",
+ "tiny-skia 0.11.4",
 ]
 
 [[package]]
