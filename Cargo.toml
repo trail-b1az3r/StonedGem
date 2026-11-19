@@ -17,6 +17,7 @@ default-members = [
     "crates/stonedgem-zsharp",
     "crates/stonedgem-zsharp-docs",
     "crates/stonedgem-hypertheme",
+    "crates/zsharpend",
 ]
 
 [workspace.package]
