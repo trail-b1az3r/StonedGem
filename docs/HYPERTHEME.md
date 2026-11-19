@@ -1,5 +1,7 @@
 # Hyperthemes and Theme Studio
 
+![Theme Studio editing the Neubrutalism graph, with its live preview](screenshots/theme-studio.png)
+
 A **`.hypertheme`** restyles the whole browser: the Iced window (toolbar,
 tabs, address field, cards, buttons, menus), the start page, and extension
 pages. OyNIx can read the same file for its Qt chrome. It's a zip archive,
@@ -82,7 +84,7 @@ opens a full-page node editor. It's a built-in **power extension**: its page
   - Shader: `.zsg` code, previewed by the shader renderer
   - Panel
   - Theme: one in light mode; an optional second one in dark mode overrides it
-- **Wires:** drag from an output dot to an input of the same type. Click a wire to remove it.
+- **Wires:** drag from an output dot to an input of the same type. Click a wire to remove it. Wires are drawn on a canvas used as the board's background, because Servo paints SVG and canvas elements above later siblings.
 - **Live preview:** a small browser drawn with the CSS the browser would generate. On every change, the script turns the graph into all the parts and the browser resolves them.
 - **Parts:** open any generated file to read it. **Save** writes the theme to the profile. **Save and use** applies it at once.
 
@@ -97,6 +99,10 @@ The script gets these power-extension functions (see
 - `hypertheme_list()`
 
 ## Neubrutalism
+
+| Start page | Settings, dark |
+|---|---|
+| ![Neubrutalism start page](screenshots/neubrutalism-start.png) | ![Neubrutalism settings in dark mode](screenshots/neubrutalism-settings-dark.png) |
 
 The built-in **Neubrutalism** theme was made in Theme Studio:
 

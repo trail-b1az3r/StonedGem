@@ -169,7 +169,7 @@
    "id": "p_tab",
    "type": "panel",
    "x": 580,
-   "y": 150,
+   "y": 255,
    "props": {
     "panel": "tab"
    }
@@ -178,7 +178,7 @@
    "id": "p_card",
    "type": "panel",
    "x": 580,
-   "y": 260,
+   "y": 470,
    "props": {
     "panel": "card"
    }
@@ -187,7 +187,7 @@
    "id": "p_button",
    "type": "panel",
    "x": 580,
-   "y": 370,
+   "y": 685,
    "props": {
     "panel": "button"
    }
@@ -196,7 +196,7 @@
    "id": "p_field",
    "type": "panel",
    "x": 580,
-   "y": 480,
+   "y": 900,
    "props": {
     "panel": "field"
    }
@@ -205,7 +205,7 @@
    "id": "p_popup",
    "type": "panel",
    "x": 580,
-   "y": 590,
+   "y": 1115,
    "props": {
     "panel": "popup"
    }
@@ -226,7 +226,7 @@
   {
    "id": "d_bg",
    "type": "color",
-   "x": 1160,
+   "x": 1440,
    "y": 40,
    "props": {
     "value": "#18181b"
@@ -235,7 +235,7 @@
   {
    "id": "d_surface",
    "type": "color",
-   "x": 1160,
+   "x": 1440,
    "y": 130,
    "props": {
     "value": "#27272a"
@@ -244,7 +244,7 @@
   {
    "id": "d_alt",
    "type": "color",
-   "x": 1160,
+   "x": 1440,
    "y": 220,
    "props": {
     "value": "#3f3f46"
@@ -253,7 +253,7 @@
   {
    "id": "d_text",
    "type": "color",
-   "x": 1160,
+   "x": 1440,
    "y": 310,
    "props": {
     "value": "#fafafa"
@@ -262,7 +262,7 @@
   {
    "id": "d_muted",
    "type": "color",
-   "x": 1160,
+   "x": 1440,
    "y": 400,
    "props": {
     "value": "#d4d4d8"
@@ -271,8 +271,8 @@
   {
    "id": "dp_toolbar",
    "type": "panel",
-   "x": 1160,
-   "y": 500,
+   "x": 1440,
+   "y": 520,
    "props": {
     "panel": "toolbar"
    }
@@ -280,8 +280,8 @@
   {
    "id": "dp_tab",
    "type": "panel",
-   "x": 1160,
-   "y": 610,
+   "x": 1440,
+   "y": 735,
    "props": {
     "panel": "tab"
    }
@@ -289,8 +289,8 @@
   {
    "id": "dp_card",
    "type": "panel",
-   "x": 1160,
-   "y": 720,
+   "x": 1440,
+   "y": 950,
    "props": {
     "panel": "card"
    }
@@ -298,8 +298,8 @@
   {
    "id": "dp_field",
    "type": "panel",
-   "x": 1160,
-   "y": 830,
+   "x": 1440,
+   "y": 1165,
    "props": {
     "panel": "field"
    }
@@ -307,8 +307,8 @@
   {
    "id": "dp_popup",
    "type": "panel",
-   "x": 1160,
-   "y": 940,
+   "x": 1440,
+   "y": 1380,
    "props": {
     "panel": "popup"
    }
@@ -316,7 +316,7 @@
   {
    "id": "dark",
    "type": "theme",
-   "x": 1440,
+   "x": 1720,
    "y": 40,
    "props": {
     "mode": "dark"

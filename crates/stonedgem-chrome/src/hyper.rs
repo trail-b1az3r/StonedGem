@@ -46,19 +46,30 @@ pub fn start_page(t: &InUse, product: &str) -> Result<String, String> {
     Ok(format!("file://{}", file.display()))
 }
 
+/// Whether `url` is a hypertheme start page (the address bar shows it empty).
+pub fn is_start_page(url: &str) -> bool {
+    url.starts_with("file://") && url.contains("/start/hypertheme-") && url.ends_with(".html")
+}
+
 pub const STUDIO_NAME: &str = "Theme Studio";
 
 /// Install Theme Studio (or update it when this build has a newer one).
 /// Returns its extension id.
 pub fn install_studio(list: &mut Vec<Entry>) -> Result<String, String> {
     let version = stonedgem_hypertheme::studio_version();
-    if let Some(e) = list.iter().find(|e| e.builtin && e.name == STUDIO_NAME && e.version == version) {
+    let files = stonedgem_hypertheme::studio_files();
+    // Up to date when the version matches and its page and script are this build's.
+    let current = |e: &Entry| {
+        e.version == version
+            && files.iter().filter(|(f, _)| matches!(*f, "extra.html" | "script.zxx")).all(|(f, text)| std::fs::read_to_string(std::path::Path::new(&e.path).join(f)).is_ok_and(|t| &t == text))
+    };
+    if let Some(e) = list.iter().find(|e| e.builtin && e.name == STUDIO_NAME && current(e)) {
         return Ok(e.id.clone());
     }
     let src = stonedgem_profile::cache_dir().join("theme-studio-src");
     let _ = std::fs::remove_dir_all(&src);
     std::fs::create_dir_all(&src).map_err(|e| e.to_string())?;
-    for (f, text) in stonedgem_hypertheme::studio_files() {
+    for (f, text) in files {
         std::fs::write(src.join(f), text).map_err(|e| format!("{f}: {e}"))?;
     }
     let e = registry::install_builtin(&src, list);

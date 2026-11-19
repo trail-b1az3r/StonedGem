@@ -169,7 +169,7 @@ pub fn ago(then: i64, now: i64) -> String {
 
 /// The address bar's text for a page's URL (the start page shows empty).
 pub fn url_to_address(url: &str) -> String {
-    if url.starts_with("data:") {
+    if url.starts_with("data:") || hyper::is_start_page(url) {
         String::new()
     } else {
         stonedgem_url::display(url, true)

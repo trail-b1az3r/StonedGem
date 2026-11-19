@@ -18,13 +18,13 @@ fn studio_compiles_saves_and_applies() {
 
     let mut list = vec![];
     let id = hyper::install_studio(&mut list).expect("install Theme Studio");
-    let e = list.iter().find(|e| e.id == id).unwrap();
+    let e = list.iter().find(|e| e.id == id).unwrap().clone();
     assert!(e.power && e.builtin && e.has_script, "{e:?}");
     let page = std::fs::read_to_string(std::path::Path::new(&e.path).join("extra.html")).unwrap();
     assert!(page.contains("\"Neubrutalism\"") && !page.contains("/*NEUBRUTALISM_GRAPH*/"), "the template graph is filled in");
     // Installing again with the same version keeps it.
     assert_eq!(hyper::install_studio(&mut list).unwrap(), id);
-    assert!(hyper::page_bridge(e).contains("sendMessage"));
+    assert!(hyper::page_bridge(&e).contains("sendMessage"));
 
     let mut scripts = Scripts::load(&list);
     assert_eq!(scripts.len(), 1, "{:?}", scripts.errors);

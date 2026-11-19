@@ -994,7 +994,7 @@ fn settings(b: &Browser) -> Element<'_, Message> {
             button(text(name).size(13))
                 .on_press(Message::SetHypertheme(file))
                 .padding(Padding::from([7, 14]))
-                .style(if chosen { filled(p) } else { tonal(p) }),
+                .style(move |t: &Theme, st: button::Status| if chosen { filled(p)(t, st) } else { tonal(p)(t, st) }),
         );
     }
     let mut appearance = column![setting(p, "Dark mode", switch(s.dark, Message::SetDark)), setting(p, "Style", styles)].spacing(6);

@@ -1616,8 +1616,17 @@ fn install_as(source: &Path, list: &mut Vec<Entry>, builtin: bool) -> Result<Ent
     let staging = base.join(format!(".staging-{}-{}-{n}", std::process::id(), now()));
     let _ = std::fs::remove_dir_all(&staging);
     std::fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
-    let result = install_inner(source, &staging, &base, list, builtin);
+    let mut result = install_inner(source, &staging, &base, list, builtin);
     let _ = std::fs::remove_dir_all(&staging);
+    if builtin {
+        // It came with the browser: it can be turned off, not removed.
+        if let Ok(e) = result.as_mut() {
+            e.builtin = true;
+            if let Some(x) = list.iter_mut().find(|x| x.id == e.id) {
+                x.builtin = true;
+            }
+        }
+    }
     result
 }
 

@@ -38,13 +38,9 @@ header label input { width: auto; }
   background-image: radial-gradient(var(--ed-grid) 1.2px, transparent 1.2px);
   background-size: 22px 22px; }
 #board.panning { cursor: grabbing; }
-#world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
-#wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
-#wires path { fill: none; stroke-width: 2.5; pointer-events: stroke; cursor: pointer; }
-#wires path:hover { stroke-width: 5; }
-#wires path.draft { stroke-dasharray: 6 5; pointer-events: none; }
+#world { position: absolute; left: 0; top: 0; z-index: 1; }
 
-.node { position: absolute; width: 196px; background: var(--ed-panel); border: 1px solid var(--ed-line); border-radius: 9px; box-shadow: 0 6px 18px #0007; user-select: none; }
+.node { position: absolute; z-index: 1; width: 196px; background: var(--ed-panel); border: 1px solid var(--ed-line); border-radius: 9px; box-shadow: 0 6px 18px #0007; user-select: none; }
 .node.sel { border-color: var(--ed-sel); box-shadow: 0 0 0 1px var(--ed-sel), 0 6px 18px #0007; }
 .node .head { display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-bottom: 1px solid var(--ed-line); cursor: move; border-radius: 9px 9px 0 0; }
 .node .head b { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -116,7 +112,7 @@ header label input { width: auto; }
     <button id="apply" class="primary">Save and use</button>
   </header>
   <nav id="palette"><h2>Add a node</h2></nav>
-  <main id="board"><div id="world"><svg id="wires"></svg></div></main>
+  <main id="board"><div id="world"></div></main>
   <aside id="side">
     <section id="inspector"><h2>Inspector</h2><p class="hint">Select a node to edit it. Drag from an output dot to an input dot to wire them; click a wire to remove it. Drag the background to pan.</p></section>
     <section id="preview-wrap">
@@ -164,12 +160,17 @@ const KINDS = {
               ins: COLOR_TOKENS.map(k => [k, "color"]).concat(NUMBER_TOKENS.map(k => [k, "number"]), [["font", "font"], ["backdrop", "shader"], ["panels", "panel", true]]),
               props: [["mode", ["light", "dark"], "light"], ["name", "text", "My theme"], ["author", "text", ""], ["description", "text", ""], ["glass", "bool", false]] },
 };
+// Wires are drawn on a canvas, so they need real colours.
+const WIRE_COLOR = { color: "#f2b84b", number: "#6fc3df", font: "#c792ea", shader: "#7ee787", panel: "#ff8fb1" };
 const TYPE_COLOR = { color: "var(--t-color)", number: "var(--t-number)", font: "var(--t-font)", shader: "var(--t-shader)", panel: "var(--t-panel)" };
 
 let graph = { version: 1, nodes: [], wires: [] };
 let selected = null, values = {}, thumbs = {}, files = {}, pan = { x: 40, y: 20 };
 const $ = (s) => document.querySelector(s);
-const board = $("#board"), world = $("#world"), svg = $("#wires");
+// Wires are drawn off screen and shown as the board's background, so they
+// always sit under the nodes.
+const board = $("#board"), world = $("#world"), canvas = document.createElement("canvas");
+let drawn = []; // the wires on screen: { i, a, b } in board coordinates
 const bridge = typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage;
 
 function send(msg) {
@@ -223,32 +224,59 @@ function portPos(id, port) {
   if (!el) return null;
   const dot = port === null ? el.querySelector(".port.out .dot") : el.querySelector(`.port.in[data-port="${port}"] .dot`);
   if (!dot) return null;
-  const r = dot.getBoundingClientRect(), w = world.getBoundingClientRect();
+  const r = dot.getBoundingClientRect(), w = board.getBoundingClientRect();
   return { x: r.left - w.left + r.width / 2, y: r.top - w.top + r.height / 2 };
 }
-function curve(a, b) {
+// A wire's curve: four control points.
+function controls(a, b) {
   const dx = Math.max(40, Math.abs(b.x - a.x) * 0.5);
-  return `M${a.x},${a.y} C${a.x + dx},${a.y} ${b.x - dx},${b.y} ${b.x},${b.y}`;
+  return [a, { x: a.x + dx, y: a.y }, { x: b.x - dx, y: b.y }, b];
+}
+function stroke(ctx, a, b, color, dashed) {
+  const [p0, p1, p2, p3] = controls(a, b);
+  ctx.beginPath();
+  ctx.setLineDash(dashed ? [6, 5] : []);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.moveTo(p0.x, p0.y);
+  ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
+  ctx.stroke();
 }
 function drawWires(draft) {
-  let html = "";
-  graph.wires.forEach((w, i) => {
-    const a = portPos(w.from, null), b = portPos(w.to, w.in), f = node(w.from);
-    if (a && b && f) html += `<path d="${curve(a, b)}" stroke="${TYPE_COLOR[kind(f).out] || "#888"}" data-i="${i}"/>`;
+  const w = board.clientWidth, h = board.clientHeight;
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, w, h);
+  drawn = [];
+  graph.wires.forEach((wire, i) => {
+    const a = portPos(wire.from, null), b = portPos(wire.to, wire.in), f = node(wire.from);
+    if (!(a && b && f)) return;
+    stroke(ctx, a, b, WIRE_COLOR[kind(f).out] || "#888888", false);
+    drawn.push({ i, a, b });
   });
-  if (draft) html += `<path class="draft" d="${curve(draft.a, draft.b)}" stroke="${draft.color}"/>`;
-  svg.innerHTML = html;
-  svg.querySelectorAll("path[data-i]").forEach(p => p.addEventListener("mousedown", (e) => {
-    e.stopPropagation();
-    graph.wires.splice(+p.dataset.i, 1);
-    changed();
-  }));
+  if (draft) stroke(ctx, draft.a, draft.b, draft.color, true);
+  board.style.backgroundImage = `url(${canvas.toDataURL()}), radial-gradient(var(--ed-grid) 1.2px, transparent 1.2px)`;
+  board.style.backgroundSize = `${w}px ${h}px, 22px 22px`;
+  board.style.backgroundRepeat = "no-repeat, repeat";
+}
+// The wire under a point (board coordinates), if any: the curve sampled.
+function wireAt(pt) {
+  for (const d of drawn) {
+    const [p0, p1, p2, p3] = controls(d.a, d.b);
+    for (let k = 0; k <= 32; k++) {
+      const t = k / 32, u = 1 - t;
+      const x = u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x;
+      const y = u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y;
+      if (Math.hypot(x - pt.x, y - pt.y) < 6) return d.i;
+    }
+  }
+  return -1;
 }
 
 // ── Interaction ───────────────────────────────────────────────────────────
 
 function local(e) {
-  const r = world.getBoundingClientRect();
+  const r = board.getBoundingClientRect();
   return { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 function dragNode(e, n) {
@@ -267,7 +295,7 @@ function dragWire(e, from) {
   const type = kind(from).out, a = portPos(from.id, null);
   const targets = [...world.querySelectorAll(`.port.in[data-type="${type}"] .dot`)].filter(d => d.closest(".node").dataset.id !== from.id);
   targets.forEach(d => d.classList.add("ok"));
-  const move = (m) => drawWires({ a, b: local(m), color: TYPE_COLOR[type] });
+  const move = (m) => drawWires({ a, b: local(m), color: WIRE_COLOR[type] });
   const up = (m) => {
     removeEventListener("mousemove", move); removeEventListener("mouseup", up);
     targets.forEach(d => d.classList.remove("ok"));
@@ -285,6 +313,8 @@ function dragWire(e, from) {
 }
 board.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
+  const hit = wireAt(local(e));
+  if (hit >= 0) { graph.wires.splice(hit, 1); changed(); return; }
   if (selected) { selected = null; render(); }
   board.classList.add("panning");
   const start = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
@@ -292,7 +322,8 @@ board.addEventListener("mousedown", (e) => {
   const up = () => { board.classList.remove("panning"); removeEventListener("mousemove", move); removeEventListener("mouseup", up); };
   addEventListener("mousemove", move); addEventListener("mouseup", up);
 });
-function place() { world.style.transform = `translate(${pan.x}px, ${pan.y}px)`; }
+function place() { world.style.transform = `translate(${pan.x}px, ${pan.y}px)`; drawWires(); }
+addEventListener("resize", () => drawWires());
 addEventListener("keydown", (e) => {
   if ((e.key === "Delete" || e.key === "Backspace") && selected && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
     graph.nodes = graph.nodes.filter(n => n.id !== selected);

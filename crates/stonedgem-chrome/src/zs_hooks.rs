@@ -67,7 +67,7 @@ pub struct Scripts {
 /// the same shape). `$to`/`$from` convert values to and from JSON.
 macro_rules! register_api {
     ($it:expr, $ctx:expr, $V:ty, $to:path, $from:path) => {{
-        let it = $it;
+        let it = &mut *$it;
         let ctx: Rc<RefCell<PageCtx>> = $ctx;
         let text = |a: &[$V], i: usize| a.get(i).map(|v| v.to_string()).unwrap_or_default();
         let c = ctx.clone();
@@ -306,10 +306,10 @@ pub fn hero_png() -> Result<Vec<u8>, String> {
         "start.zsg" => Some(include_str!("../assets/start.zsg").to_string()),
         _ => None,
     };
-    let mut p = Program::load("start.zsp", &read, |_| {})?;
+    let mut p = stonedgem_zsharp::Program::load("start.zsp", &read, |_| {})?;
     p.run_main()?;
     match p.interp.global("canvas") {
-        Some(Value::Object(o)) => o.as_any().downcast_ref::<stonedgem_zsharp::canvas::Canvas>().ok_or("not a canvas".to_string())?.png(),
+        Some(stonedgem_zsharp::Value::Object(o)) => o.as_any().downcast_ref::<stonedgem_zsharp::canvas::Canvas>().ok_or("not a canvas".to_string())?.png(),
         _ => Err("the hero program made no canvas".into()),
     }
 }
@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn playground_sample_runs() {
-        let mut p = Program::from_source(PLAYGROUND_SAMPLE).unwrap();
+        let mut p = stonedgem_zsharp::Program::from_source(PLAYGROUND_SAMPLE).unwrap();
         p.run_main().unwrap();
         assert_eq!(p.output(), "drew 12 balls\n");
     }
