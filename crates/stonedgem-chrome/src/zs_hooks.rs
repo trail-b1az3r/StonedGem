@@ -116,78 +116,15 @@ fn zxx_api(it: &mut zsharpend::Interp, ctx: Rc<RefCell<PageCtx>>, power: bool) {
     if !power {
         return;
     }
-    // ── Power extensions: what Theme Studio needs ──
-    it.register("to_json", |_, a| Ok(V::str(&serde_json::to_string(&a.first().map(stonedgem_hypertheme::zxx_to_json).unwrap_or(Json::Null)).unwrap_or_default())));
-    it.register("from_json", |_, a| {
-        let t = a.first().map(|v| v.to_string()).unwrap_or_default();
-        serde_json::from_str::<Json>(&t).map(|j| stonedgem_hypertheme::json_to_zxx(&j)).map_err(|e| format!("from_json: {e}"))
-    });
-    it.register("zsg_preview", |_, a| {
-        let code = a.first().map(|v| v.to_string()).unwrap_or_default();
-        let w = a.get(1).and_then(|v| v.as_i64()).unwrap_or(160).clamp(8, 512);
-        let h = a.get(2).and_then(|v| v.as_i64()).unwrap_or(100).clamp(8, 512);
-        zsg_preview(&code, w as u32, h as u32).map(|u| V::str(&u))
-    });
-    it.register("hypertheme_save", |_, a| {
-        let name = a.first().map(|v| v.to_string()).unwrap_or_default();
-        let files = match a.get(1).map(stonedgem_hypertheme::zxx_to_json) {
-            Some(Json::Object(m)) => m.into_iter().map(|(k, v)| (k, v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))).collect::<BTreeMap<String, String>>(),
-            _ => return Err("hypertheme_save(name, files): files is a map of file name → text".into()),
-        };
-        save_hypertheme(&name, files).map(|f| V::str(&f))
-    });
+    // ── Power extensions: what Theme Studio needs (shared with OyNIx) ──
     let c = ctx;
-    it.register("hypertheme_apply", move |_, a| {
-        c.borrow_mut().actions.push(Action::ApplyHypertheme(a.first().map(|v| v.to_string()).unwrap_or_default()));
-        Ok(V::Null)
-    });
-    it.register("hypertheme_resolve", |_, a| {
-        // (files, dark) → { tokens, panels, css, warnings }: what the browser
-        // would make of these parts, for the Studio's live preview.
-        let files = match a.first().map(stonedgem_hypertheme::zxx_to_json) {
-            Some(Json::Object(m)) => m.into_iter().map(|(k, v)| (k, v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))).collect::<BTreeMap<String, String>>(),
-            _ => return Err("hypertheme_resolve(files, dark): files is a map of file name → text".into()),
-        };
-        let dark = matches!(a.get(1), Some(V::Bool(true)));
-        let mut files = files;
-        files.entry("hypertheme.toml".into()).or_insert_with(|| "[hypertheme]\nname = \"Preview\"\n".into());
-        let h = stonedgem_hypertheme::Hypertheme::from_files(files)?;
-        let r = h.resolve(dark);
-        let mut css = r.css();
-        if let Some(extra) = h.files.get("pages.css") {
-            css.push_str(extra);
-        }
-        Ok(stonedgem_hypertheme::json_to_zxx(&serde_json::json!({ "tokens": r.tokens, "panels": r.panels, "css": css, "warnings": r.warnings })))
-    });
-    it.register("hypertheme_list", |_, _| {
-        Ok(V::list(stonedgem_hypertheme::installed().into_iter().map(|(f, n)| V::list(vec![V::str(&f), V::str(&n)])).collect()))
-    });
+    stonedgem_hypertheme::studio::register_power(it, Rc::new(move |f| c.borrow_mut().actions.push(Action::ApplyHypertheme(f))));
 }
 
-/// A `.zsg` with `fragment preview(uv: vec2) -> color`, drawn small, as a
-/// `data:` PNG URL (Theme Studio's shader node).
-pub fn zsg_preview(code: &str, w: u32, h: u32) -> Result<String, String> {
-    let m = stonedgem_zsharp::zsg::Module::parse(code)?;
-    let entry = if m.entry("preview").is_some() { "preview".to_string() } else { m.entry_names().into_iter().next().ok_or("no fragment to preview")? };
-    let c = stonedgem_zsharp::canvas::Canvas::new(w as i64, h as i64)?;
-    c.shade(&m, &entry, (0, 0, w as i32, h as i32), &Default::default())?;
-    Ok(format!("data:image/png;base64,{}", base64(&c.png()?)))
-}
-
+/// A `.zsg` drawn small, as a `data:` PNG URL (Theme Studio's shader node).
+pub use stonedgem_hypertheme::studio::zsg_preview;
 /// Write a hypertheme into the profile (checked first). Returns its file name.
-pub fn save_hypertheme(name: &str, mut files: BTreeMap<String, String>) -> Result<String, String> {
-    if name.trim().is_empty() {
-        return Err("a hypertheme needs a name".into());
-    }
-    files.entry("hypertheme.toml".into()).or_insert_with(|| format!("[hypertheme]\nname = {}\n", serde_json::to_string(name).unwrap_or_default()));
-    let h = stonedgem_hypertheme::Hypertheme::from_files(files)?;
-    let dir = std::env::temp_dir().join(format!("stonedgem-ht-{}", std::process::id()));
-    let tmp = dir.join("theme.hypertheme");
-    h.write(&tmp)?;
-    let file = stonedgem_hypertheme::install(&tmp)?;
-    let _ = std::fs::remove_dir_all(dir);
-    Ok(file)
-}
+pub use stonedgem_hypertheme::studio::save as save_hypertheme;
 
 impl Scripts {
     /// Load the scripts of the enabled extensions in `list` that have one.

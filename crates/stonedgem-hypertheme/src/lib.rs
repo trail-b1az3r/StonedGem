@@ -31,6 +31,7 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value as Json};
 
 pub mod basic_rust;
+pub mod studio;
 
 /// The files a hypertheme may hold.
 pub const FILES: &[&str] = &[
