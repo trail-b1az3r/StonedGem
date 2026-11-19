@@ -1,0 +1,27 @@
+// GPU code for docs/zsharp/gpu.md: a fragment shader and two kernels.
+const PI = 3.14159265
+
+func ring(d: float, r: float, w: float) -> float {
+    return smoothstep(w, 0.0, abs(d - r))
+}
+
+fragment rings(uv: vec2, uniform time: float) -> color {
+    let p = (uv - vec2(0.5, 0.5)) * vec2(resolution.x / resolution.y, 1.0)
+    let d = length(p)
+    var c = vec3(0.06, 0.08, 0.11)
+    for i in 1..5 {
+        let r = 0.08 * float(i) + 0.01 * sin(time + float(i))
+        c += mix(vec3(0.18, 0.49, 0.96), vec3(0.91, 0.71, 0.36), float(i) / 4.0) * ring(d, r, 0.012)
+    }
+    return vec4(c, 1.0)
+}
+
+// Element-wise: every number to its square root.
+kernel roots(buf xs: [float]) {
+    xs[gid] = sqrt(xs[gid])
+}
+
+// Two buffers: weights times values, written into out.
+kernel weigh(buf values: [float], buf weights: [float], buf out: [float], uniform bias: float) {
+    out[gid] = values[gid] * weights[gid] + bias
+}

@@ -346,7 +346,8 @@ pub fn builtin(name: &str) -> Option<Value> {
     }
 }
 
-const GLOBALS: &[&str] = &[
+/// Every built-in global (the docs check that each one is documented).
+pub const GLOBALS: &[&str] = &[
     "Printl", "println", "Print", "print", "len", "str", "to_string", "int", "to_int", "float", "to_float", "bool", "type", "range", "abs", "floor",
     "ceil", "round", "sqrt", "sin", "cos", "tan", "atan2", "pow", "min", "max", "clamp", "lerp", "random", "PI", "TAU", "rgb", "rgba", "hsl", "mix",
     "with_alpha", "push", "pop", "map", "filter", "reduce", "sum", "sort", "reverse", "join", "first", "last", "slice", "zip", "upper", "lower",
