@@ -28,11 +28,24 @@ fn frames_input_and_history() {
     let page = engine.open(PAGE, &[], &[]).unwrap();
     assert!(engine.wait(Duration::from_secs(30), || page.load() == Load::Complete));
 
-    // A frame comes back at the engine's size, painted with the page.
-    assert!(engine.wait(Duration::from_secs(10), || page.has_new_frame()));
-    let f = page.frame(&engine).expect("a frame");
-    assert_eq!((f.width, f.height), (400, 300));
-    let [r, g, b, _] = f.pixel(300, 250);
+    // A frame comes back at the engine's size, painted with the page. The
+    // first frames can come before the page's style is painted (a blank,
+    // white page), so take frames until one shows it, for up to 10 s.
+    let mut seen = (0, 0, 0);
+    let mut size = (0, 0);
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        engine.wait(Duration::from_millis(100), || page.has_new_frame());
+        let f = page.frame(&engine).expect("a frame");
+        size = (f.width, f.height);
+        let [r, g, b, _] = f.pixel(300, 250);
+        seen = (r, g, b);
+        if r > 200 && g < 50 && b < 50 {
+            break;
+        }
+    }
+    assert_eq!(size, (400, 300));
+    let (r, g, b) = seen;
     assert!(r > 200 && g < 50 && b < 50, "background should be red, got {r},{g},{b}");
 
     // Click the button.
