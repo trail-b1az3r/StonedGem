@@ -36,6 +36,13 @@ jobs:
         run: |
           mkdir -p site
           cp index.html site/index.html
+          # Preserve the source documentation URLs (including the legacy ZSHARP.md link).
+          mkdir -p site/docs
+          cp docs/*.md site/docs/
+          # Add an HTML redirect for the old docs landing page.
+          cat > site/docs/ZSHARP.html <<'EOF'
+          <!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=../zsharp/index.html"><link rel="canonical" href="../zsharp/index.html"><title>Z#++ documentation</title></head><body><p>Moved: <a href="../zsharp/index.html">Z#++ documentation</a></p></body></html>
+          EOF
           touch site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
