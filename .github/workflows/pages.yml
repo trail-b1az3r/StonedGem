@@ -1,0 +1,56 @@
+name: Build and deploy StonedGem Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "index.html"
+      - "docs/**"
+      - "crates/stonedgem-zsharp/**"
+      - "crates/stonedgem-zsharp-docs/**"
+      - "examples/zsharp/**"
+      - ".github/workflows/pages.yml"
+  pull_request:
+    paths:
+      - "index.html"
+      - "docs/**"
+      - "crates/stonedgem-zsharp/**"
+      - "crates/stonedgem-zsharp-docs/**"
+      - "examples/zsharp/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the Z#++ documentation site (validate examples)
+        run: cargo run -p stonedgem-zsharp-docs -- site/zsharp
+      - name: Assemble Pages site
+        run: |
+          mkdir -p site
+          cp index.html site/index.html
+          touch site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
