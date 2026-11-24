@@ -146,7 +146,7 @@ const SAMPLE_SHADER = "fragment background(uv: vec2) -> color {\n    let a = vec
 
 // What each kind of node takes, gives and has.
 const KINDS = {
-  color:    { label: "Colour",   out: "color",  ins: [], props: [["value", "color", "#ff5c8a"]] },
+  color:    { label: "Color",   out: "color",  ins: [], props: [["value", "color", "#ff5c8a"]] },
   hsl:      { label: "HSL",      out: "color",  ins: [], props: [["h", "number", 330], ["s", "number", 0.9], ["l", "number", 0.6]] },
   mix:      { label: "Mix",      out: "color",  ins: [["a", "color"], ["b", "color"]], props: [["t", "number", 0.5]] },
   shade:    { label: "Shade",    out: "color",  ins: [["color", "color"]], props: [["amount", "number", 0.2]] },
@@ -160,7 +160,7 @@ const KINDS = {
               ins: COLOR_TOKENS.map(k => [k, "color"]).concat(NUMBER_TOKENS.map(k => [k, "number"]), [["font", "font"], ["backdrop", "shader"], ["panels", "panel", true]]),
               props: [["mode", ["light", "dark"], "light"], ["name", "text", "My theme"], ["author", "text", ""], ["description", "text", ""], ["glass", "bool", false]] },
 };
-// Wires are drawn on a canvas, so they need real colours.
+// Wires are drawn on a canvas, so they need real colors.
 const WIRE_COLOR = { color: "#f2b84b", number: "#6fc3df", font: "#c792ea", shader: "#7ee787", panel: "#ff8fb1" };
 const TYPE_COLOR = { color: "var(--t-color)", number: "var(--t-number)", font: "var(--t-font)", shader: "var(--t-shader)", panel: "var(--t-panel)" };
 
