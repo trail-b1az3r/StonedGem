@@ -17,11 +17,29 @@
 //! | `chrome.qml` | **QML** for OyNIx (a `Theme` override) |
 //! | `background.zsg` | a fragment shader (`fragment background(uv: vec2) -> color`) drawn behind the start page |
 //! | `graph.json` | the Theme Studio graph it was made from, to edit it again |
+//! | `modules/*.zxx` | Zsharpend modules the theme's programs `import` |
+//! | `include/*.zsx` | Z#++ headers the theme's programs `#include` / `import` |
+//! | `images/*` | pictures (PNG, JPEG, WebP, GIF, SVG): background images and other art |
 //!
 //! Tokens are merged in that order — `tokens.json`, `style.rs`,
 //! `theme.zsp`, `theme.zxx`, `iced.toml` — later ones winning, then the
 //! `dark` overrides when the browser is dark. Theme programs run in the
-//! Z#++/Zsharpend sandboxes.
+//! Z#++/Zsharpend sandboxes and can only read the theme's own files.
+//!
+//! ## Power hyperthemes (`.phypertheme`)
+//!
+//! A theme whose `hypertheme.toml` says `power = true` may also hold parts
+//! that run code in the browser's interface, so installing one is a choice
+//! the user confirms (like a power extension):
+//!
+//! | File | What it gives |
+//! |---|---|
+//! | `global.zxx` | a **Zsharpend** program: `fn global(dark)` returns a map of global settings (glass, background image, overlay, motion, effect parameters…) and may also set tokens (`"tokens"`) and panels |
+//! | `global.zsg` | a fragment shader (`fragment global(uv: vec2) -> color`) laid over the whole window (its alpha decides how much shows) |
+//! | `global.qml` | **QML** layers over (or under) the whole interface: glass, frames, particles… |
+//! | `effect.qml` | a **QML** layer effect applied to the whole interface (it receives the rendered UI as `source`): colour grading, blur, glow, distortion… |
+//! | `format-panel.qt` | **QML** (`QtObject { property int toolbarHeight: … }`) setting the interface's format: bar and tab heights, font sizes, spacing, corner scale |
+//! | `styles.tsx` | **TSX** exporting per-component styles (`export const button = { radius: 4, weight: 700 }`) and CSS for pages |
 
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
@@ -33,12 +51,57 @@ use serde_json::{json, Map, Value as Json};
 pub mod basic_rust;
 pub mod studio;
 
-/// The files a hypertheme may hold.
+/// The files a hypertheme may hold (besides `modules/`, `include/` and `images/`).
 pub const FILES: &[&str] = &[
     "hypertheme.toml", "tokens.json", "style.rs", "theme.zsp", "theme.zxx", "iced.toml", "pages.css", "start.tsx", "chrome.qml", "background.zsg", "graph.json",
 ];
+/// The parts only a power hypertheme (`.phypertheme`) may hold.
+pub const POWER_FILES: &[&str] = &["global.zxx", "global.zsg", "global.qml", "effect.qml", "format-panel.qt", "styles.tsx"];
+/// Picture types allowed under `images/`.
+pub const IMAGE_TYPES: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "svg"];
 const MAX_FILE: usize = 1 << 20;
 const MAX_TOTAL: usize = 4 << 20;
+const MAX_IMAGE: usize = 8 << 20;
+const MAX_IMAGES: usize = 24 << 20;
+
+/// What kind of file `name` is in a hypertheme, or why it can't be one.
+fn kind_of(name: &str) -> Result<Part, String> {
+    if FILES.contains(&name) {
+        return Ok(Part::Text);
+    }
+    if POWER_FILES.contains(&name) {
+        return Ok(Part::Power);
+    }
+    let safe = |rest: &str| !rest.is_empty() && !rest.contains('/') && !rest.starts_with('.') && rest.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'));
+    if let Some(rest) = name.strip_prefix("modules/") {
+        if safe(rest) && rest.ends_with(".zxx") {
+            return Ok(Part::Text);
+        }
+    }
+    if let Some(rest) = name.strip_prefix("include/") {
+        if safe(rest) && rest.ends_with(".zsx") {
+            return Ok(Part::Text);
+        }
+    }
+    if let Some(rest) = name.strip_prefix("images/") {
+        let ext = rest.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+        if safe(rest) && IMAGE_TYPES.contains(&ext.as_str()) {
+            return Ok(Part::Image);
+        }
+    }
+    Err(format!(
+        "a hypertheme can't hold `{name}` (it holds {}, modules/*.zxx, include/*.zsx and images/*; a .phypertheme also {})",
+        FILES.join(", "),
+        POWER_FILES.join(", ")
+    ))
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Part {
+    Text,
+    Power,
+    Image,
+}
 
 /// Global tokens every theme can set (colours are `#rrggbb`).
 pub const COLOR_TOKENS: &[&str] = &["background", "surface", "surface_alt", "text", "muted", "accent", "on_accent", "border", "danger", "shadow"];
@@ -61,6 +124,10 @@ pub struct Manifest {
     /// Which modes it was made for: "light", "dark" or "both".
     #[serde(default = "both")]
     pub modes: String,
+    /// A power hypertheme (`.phypertheme`): may hold parts that run code in
+    /// the interface (global.qml, effect.qml, …).
+    #[serde(default)]
+    pub power: bool,
 }
 fn v010() -> String {
     "0.1.0".into()
@@ -74,11 +141,13 @@ struct ManifestFile {
     hypertheme: Manifest,
 }
 
-/// A loaded hypertheme: its manifest and files.
+/// A loaded hypertheme: its manifest, its text files and its pictures.
 #[derive(Clone, Debug)]
 pub struct Hypertheme {
     pub manifest: Manifest,
     pub files: BTreeMap<String, String>,
+    /// `images/*`, by path.
+    pub assets: BTreeMap<String, Vec<u8>>,
 }
 
 /// Tokens for one mode, ready to use.
@@ -89,20 +158,30 @@ pub struct Resolved {
     pub panels: BTreeMap<String, Map<String, Json>>,
     /// Problems worth showing (contrast too low, a theme program failed…).
     pub warnings: Vec<String>,
+    /// Power hyperthemes: what `global.zxx`'s `global(dark)` returned.
+    pub global: Map<String, Json>,
 }
 
 impl Hypertheme {
     /// From a `.hypertheme` file (zip) or a folder.
     pub fn open(path: &Path) -> Result<Hypertheme, String> {
-        let files = if path.is_dir() { read_dir(path)? } else { read_zip(&std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?)? };
-        Hypertheme::from_files(files)
+        let (files, assets) = if path.is_dir() { read_dir(path)? } else { read_zip(&std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?)? };
+        Hypertheme::from_parts(files, assets)
     }
 
+    /// A theme of text files only.
     pub fn from_files(files: BTreeMap<String, String>) -> Result<Hypertheme, String> {
+        Hypertheme::from_parts(files, BTreeMap::new())
+    }
+
+    pub fn from_parts(files: BTreeMap<String, String>, assets: BTreeMap<String, Vec<u8>>) -> Result<Hypertheme, String> {
         let mut total = 0;
+        let mut power_parts = vec![];
         for (name, text) in &files {
-            if !FILES.contains(&name.as_str()) {
-                return Err(format!("a hypertheme can't hold `{name}` (it holds {})", FILES.join(", ")));
+            match kind_of(name)? {
+                Part::Image => return Err(format!("{name} is a picture, not text")),
+                Part::Power => power_parts.push(name.clone()),
+                Part::Text => {}
             }
             if text.len() > MAX_FILE {
                 return Err(format!("{name} is larger than 1 MB"));
@@ -110,16 +189,57 @@ impl Hypertheme {
             total += text.len();
         }
         if total > MAX_TOTAL {
-            return Err("a hypertheme is at most 4 MB".into());
+            return Err("a hypertheme's text is at most 4 MB".into());
+        }
+        let mut pictures = 0;
+        for (name, bytes) in &assets {
+            if kind_of(name)? != Part::Image {
+                return Err(format!("{name} isn't a picture under images/"));
+            }
+            if bytes.len() > MAX_IMAGE {
+                return Err(format!("{name} is larger than 8 MB"));
+            }
+            if !looks_like_image(bytes) {
+                return Err(format!("{name} isn't a PNG, JPEG, WebP, GIF or SVG picture"));
+            }
+            pictures += bytes.len();
+        }
+        if pictures > MAX_IMAGES {
+            return Err("a hypertheme's pictures are at most 24 MB together".into());
         }
         let m = files.get("hypertheme.toml").ok_or("a hypertheme needs hypertheme.toml")?;
         let manifest = toml::from_str::<ManifestFile>(m).map_err(|e| format!("hypertheme.toml: {e}"))?.hypertheme;
         if manifest.name.trim().is_empty() {
             return Err("hypertheme.toml: `name` can't be empty".into());
         }
-        let h = Hypertheme { manifest, files };
+        if !power_parts.is_empty() && !manifest.power {
+            return Err(format!("{} can only be in a power hypertheme: add `power = true` to hypertheme.toml (and name it .phypertheme)", power_parts.join(", ")));
+        }
+        let h = Hypertheme { manifest, files, assets };
         h.check()?;
         Ok(h)
+    }
+
+    /// A power hypertheme (`.phypertheme`).
+    pub fn is_power(&self) -> bool {
+        self.manifest.power
+    }
+
+    /// The file name it installs as: `<slug>.hypertheme` or `<slug>.phypertheme`.
+    pub fn file_name(&self) -> String {
+        let slug: String = self.manifest.name.to_lowercase().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect::<String>().trim_matches('-').to_string();
+        format!("{}.{}", if slug.is_empty() { "theme".into() } else { slug }, if self.is_power() { "phypertheme" } else { "hypertheme" })
+    }
+
+    /// Read a theme file as the theme programs see it (`modules/`, `include/`…).
+    fn reader(&self) -> impl Fn(&str) -> Option<String> + '_ {
+        move |p: &str| {
+            let p = p.trim_start_matches("./");
+            // `import palette` looks for modules/palette/mod.zxx; a theme
+            // keeps it as modules/palette.zxx.
+            let flat = p.strip_prefix("modules/").and_then(|r| r.strip_suffix("/mod.zxx")).map(|n| format!("modules/{n}.zxx"));
+            self.files.get(p).or_else(|| flat.and_then(|f| self.files.get(&f))).cloned()
+        }
     }
 
     /// Parse every part, so a broken theme is refused when it's installed.
@@ -136,8 +256,32 @@ impl Hypertheme {
         if let Some(t) = self.files.get("theme.zsp") {
             stonedgem_zsharp::parser::parse(t, stonedgem_zsharp::ast::Kind::Program).map_err(|e| format!("theme.zsp: {e}"))?;
         }
-        if let Some(t) = self.files.get("theme.zxx") {
-            zsharpend::parser::parse(t, zsharpend::ast::Kind::Zxx).map_err(|e| format!("theme.zxx: {e}"))?;
+        for (name, t) in &self.files {
+            let r = if name.ends_with(".zxx") {
+                zsharpend::parser::parse(t, zsharpend::ast::Kind::Zxx).map(|_| ())
+            } else if name.ends_with(".zsx") {
+                zsharpend::parser::parse(t, zsharpend::ast::Kind::Header).map(|_| ())
+            } else {
+                Ok(())
+            };
+            r.map_err(|e| format!("{name}: {e}"))?;
+        }
+        if let Some(t) = self.files.get("global.zsg") {
+            let m = stonedgem_zsharp::zsg::Module::parse(t).map_err(|e| format!("global.zsg: {e}"))?;
+            if m.entry("global").is_none() {
+                return Err("global.zsg: needs `fragment global(uv: vec2) -> color`".into());
+            }
+        }
+        if let Some(t) = self.files.get("styles.tsx") {
+            stonedgem_extensions::tscompile::transpile_tsx(t, "styles.tsx")?;
+        }
+        for name in ["global.qml", "effect.qml", "format-panel.qt", "chrome.qml"] {
+            if let Some(t) = self.files.get(name) {
+                // Qt checks QML when it loads it; here only that it looks like QML.
+                if !t.lines().any(|l| l.trim_start().starts_with("import ")) || !t.contains('{') {
+                    return Err(format!("{name}: doesn't look like QML (it needs `import QtQuick` and an object)"));
+                }
+            }
         }
         if let Some(t) = self.files.get("background.zsg") {
             let m = stonedgem_zsharp::zsg::Module::parse(t).map_err(|e| format!("background.zsg: {e}"))?;
@@ -169,16 +313,36 @@ impl Hypertheme {
                 Err(e) => r.warnings.push(format!("style.rs: {e}")),
             }
         }
-        if let Some(t) = self.files.get("theme.zsp") {
-            match run_zsp(t, dark) {
+        if self.files.contains_key("theme.zsp") {
+            match run_zsp(&self.reader(), dark) {
                 Ok(v) => layers.push(("theme.zsp".into(), v)),
                 Err(e) => r.warnings.push(format!("theme.zsp: {e}")),
             }
         }
-        if let Some(t) = self.files.get("theme.zxx") {
-            match run_zxx(t, dark) {
+        if self.files.contains_key("theme.zxx") {
+            match run_zxx(&self.reader(), "theme.zxx", "tokens", dark) {
                 Ok(v) => layers.push(("theme.zxx".into(), v)),
                 Err(e) => r.warnings.push(format!("theme.zxx: {e}")),
+            }
+        }
+        // global.zxx: global settings, and tokens/panels if it returns them.
+        if self.is_power() && self.files.contains_key("global.zxx") {
+            match run_zxx(&self.reader(), "global.zxx", "global", dark) {
+                Ok(Json::Object(mut g)) => {
+                    let mut layer = Map::new();
+                    if let Some(Json::Object(t)) = g.remove("tokens") {
+                        layer.extend(t);
+                    }
+                    if let Some(p) = g.remove("panels") {
+                        layer.insert("panels".into(), p);
+                    }
+                    if !layer.is_empty() {
+                        layers.push(("global.zxx".into(), Json::Object(layer)));
+                    }
+                    r.global = g;
+                }
+                Ok(other) => r.warnings.push(format!("global.zxx: global() returned {other}, not a map")),
+                Err(e) => r.warnings.push(format!("global.zxx: {e}")),
             }
         }
         if let Some(t) = self.files.get("iced.toml") {
@@ -204,9 +368,51 @@ impl Hypertheme {
         r
     }
 
-    /// Write as a `.hypertheme` (zip).
+    /// Write as a `.hypertheme` / `.phypertheme` (zip).
     pub fn write(&self, path: &Path) -> Result<(), String> {
-        write_zip(path, &self.files)
+        write_zip_parts(path, &self.files, &self.assets)
+    }
+
+    /// Unpack every part into `dir` (so QML parts and pictures can be
+    /// loaded from files). Anything else already in `dir` is removed.
+    pub fn materialize(&self, dir: &Path) -> Result<(), String> {
+        let _ = std::fs::remove_dir_all(dir);
+        for (name, text) in &self.files {
+            write_part(dir, name, text.as_bytes())?;
+        }
+        for (name, bytes) in &self.assets {
+            write_part(dir, name, bytes)?;
+        }
+        Ok(())
+    }
+
+    /// `styles.tsx` as the body of a JavaScript function that returns its
+    /// exports (`export const x = …` → `exports.x`, `export default` → `exports.default`).
+    pub fn styles_js(&self) -> Option<Result<String, String>> {
+        let tsx = self.files.get("styles.tsx")?;
+        Some(stonedgem_extensions::tscompile::transpile_tsx(tsx, "styles.tsx").map(|js| {
+            let mut out = String::from("var exports = {};\n");
+            for line in js.lines() {
+                let t = line.trim_start();
+                if let Some(rest) = t.strip_prefix("export default ") {
+                    out.push_str("exports.default = ");
+                    out.push_str(rest);
+                } else if let Some(rest) = t.strip_prefix("export const ").or_else(|| t.strip_prefix("export let ")).or_else(|| t.strip_prefix("export var ")) {
+                    let name = rest.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$')).next().unwrap_or("");
+                    out.push_str(&format!("var {rest}\nexports.{name} = {name};"));
+                } else if let Some(rest) = t.strip_prefix("export function ") {
+                    let name = rest.split('(').next().unwrap_or("").trim();
+                    out.push_str(&format!("function {rest}\nexports.{name} = {name};"));
+                } else if t.starts_with("export {") || t.starts_with("import ") {
+                    // Re-exports and imports aren't available in styles.tsx.
+                } else {
+                    out.push_str(line);
+                }
+                out.push('\n');
+            }
+            out.push_str("return exports;\n");
+            out
+        }))
     }
 }
 
@@ -425,8 +631,9 @@ pub fn json_to_zxx(j: &Json) -> zsharpend::Value {
     }
 }
 
-fn run_zsp(src: &str, dark: bool) -> Result<Json, String> {
-    let mut p = stonedgem_zsharp::Program::from_source(src)?;
+/// Run `theme.zsp`'s `tokens(dark)`; it can `#include` the theme's `include/*.zsx`.
+fn run_zsp(read: &dyn Fn(&str) -> Option<String>, dark: bool) -> Result<Json, String> {
+    let mut p = stonedgem_zsharp::Program::load("theme.zsp", read, |_| {})?;
     p.interp.limits.time = std::time::Duration::from_millis(500);
     match p.interp.call_global("tokens", vec![stonedgem_zsharp::Value::Bool(dark)])? {
         Some(v @ stonedgem_zsharp::Value::Map(_)) => Ok(zsp_to_json(&v)),
@@ -435,13 +642,15 @@ fn run_zsp(src: &str, dark: bool) -> Result<Json, String> {
     }
 }
 
-fn run_zxx(src: &str, dark: bool) -> Result<Json, String> {
-    let mut p = zsharpend::Program::from_zxx(src)?;
+/// Run `entry`'s `func(dark)`; it can import the theme's `modules/*.zxx`
+/// and `include/*.zsx`.
+fn run_zxx(read: &dyn Fn(&str) -> Option<String>, entry: &str, func: &str, dark: bool) -> Result<Json, String> {
+    let mut p = zsharpend::Program::load(entry, read, |_| {})?;
     p.interp.limits.time = std::time::Duration::from_millis(500);
-    match p.interp.call_global("tokens", vec![zsharpend::Value::Bool(dark)])? {
+    match p.interp.call_global(func, vec![zsharpend::Value::Bool(dark)])? {
         Some(v @ zsharpend::Value::Map(_)) => Ok(zxx_to_json(&v)),
-        Some(other) => Err(format!("tokens() returned {}, not a map", other.type_name())),
-        None => Err("needs `fn tokens(dark)`".into()),
+        Some(other) => Err(format!("{func}() returned {}, not a map", other.type_name())),
+        None => Err(format!("needs `fn {func}(dark)`")),
     }
 }
 
@@ -449,11 +658,22 @@ fn run_zxx(src: &str, dark: bool) -> Result<Json, String> {
 
 /// The theme's background shader drawn at `w`×`h`, as PNG.
 pub fn background_png(h: &Hypertheme, w: u32, ht: u32) -> Option<Result<Vec<u8>, String>> {
-    let src = h.files.get("background.zsg")?;
+    shade_png(h.files.get("background.zsg")?, "background", w, ht)
+}
+
+/// A power theme's `global.zsg` (laid over the whole window) at `w`×`h`, as PNG.
+pub fn global_png(h: &Hypertheme, w: u32, ht: u32) -> Option<Result<Vec<u8>, String>> {
+    if !h.is_power() {
+        return None;
+    }
+    shade_png(h.files.get("global.zsg")?, "global", w, ht)
+}
+
+fn shade_png(src: &str, entry: &str, w: u32, ht: u32) -> Option<Result<Vec<u8>, String>> {
     Some((|| {
         let m = stonedgem_zsharp::zsg::Module::parse(src)?;
-        let c = stonedgem_zsharp::canvas::Canvas::new(w as i64, ht as i64)?;
-        c.shade(&m, "background", (0, 0, w as i32, ht as i32), &Default::default())?;
+        let c = stonedgem_zsharp::canvas::Canvas::new(w.clamp(1, 4096) as i64, ht.clamp(1, 4096) as i64)?;
+        c.shade(&m, entry, (0, 0, w.clamp(1, 4096) as i32, ht.clamp(1, 4096) as i32), &Default::default())?;
         c.png()
     })())
 }
@@ -517,44 +737,93 @@ fn css_escape_block(css: &str) -> String {
 
 // ── Files ──────────────────────────────────────────────────────────────
 
-fn read_dir(dir: &Path) -> Result<BTreeMap<String, String>, String> {
-    let mut out = BTreeMap::new();
-    for f in FILES {
-        let p = dir.join(f);
-        if p.is_file() {
-            out.insert(f.to_string(), std::fs::read_to_string(&p).map_err(|e| format!("{f}: {e}"))?);
-        }
-    }
-    Ok(out)
+type Parts = (BTreeMap<String, String>, BTreeMap<String, Vec<u8>>);
+
+fn looks_like_image(b: &[u8]) -> bool {
+    b.starts_with(b"\x89PNG")
+        || b.starts_with(b"GIF8")
+        || b.starts_with(b"\xff\xd8\xff")
+        || (b.starts_with(b"RIFF") && b.get(8..12) == Some(b"WEBP"))
+        || String::from_utf8_lossy(&b[..b.len().min(512)]).to_ascii_lowercase().contains("<svg")
 }
 
-fn read_zip(bytes: &[u8]) -> Result<BTreeMap<String, String>, String> {
+fn add_part(files: &mut BTreeMap<String, String>, assets: &mut BTreeMap<String, Vec<u8>>, name: String, bytes: Vec<u8>) -> Result<(), String> {
+    if kind_of(&name)? == Part::Image {
+        assets.insert(name, bytes);
+    } else {
+        let text = String::from_utf8(bytes).map_err(|_| format!("{name} isn't UTF-8 text"))?;
+        files.insert(name, text);
+    }
+    Ok(())
+}
+
+fn read_dir(dir: &Path) -> Result<Parts, String> {
+    let (mut files, mut assets) = (BTreeMap::new(), BTreeMap::new());
+    for f in FILES.iter().chain(POWER_FILES) {
+        let p = dir.join(f);
+        if p.is_file() {
+            add_part(&mut files, &mut assets, f.to_string(), std::fs::read(&p).map_err(|e| format!("{f}: {e}"))?)?;
+        }
+    }
+    for sub in ["modules", "include", "images"] {
+        let Ok(rd) = std::fs::read_dir(dir.join(sub)) else { continue };
+        for e in rd.filter_map(|e| e.ok()) {
+            let p = e.path();
+            if !p.is_file() {
+                continue;
+            }
+            let name = format!("{sub}/{}", e.file_name().to_string_lossy());
+            let limit = if sub == "images" { MAX_IMAGE } else { MAX_FILE };
+            if std::fs::metadata(&p).map(|m| m.len() as usize > limit).unwrap_or(false) {
+                return Err(format!("{name} is too large"));
+            }
+            add_part(&mut files, &mut assets, name.clone(), std::fs::read(&p).map_err(|e| format!("{name}: {e}"))?)?;
+        }
+    }
+    Ok((files, assets))
+}
+
+fn read_zip(bytes: &[u8]) -> Result<Parts, String> {
     let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| format!("not a .hypertheme (zip) file: {e}"))?;
-    let mut out = BTreeMap::new();
+    let (mut files, mut assets) = (BTreeMap::new(), BTreeMap::new());
     for i in 0..z.len() {
         let mut f = z.by_index(i).map_err(|e| e.to_string())?;
         if f.is_dir() {
             continue;
         }
         let name = f.name().trim_start_matches("./").to_string();
-        if f.size() as usize > MAX_FILE {
-            return Err(format!("{name} is larger than 1 MB"));
+        let limit = if name.starts_with("images/") { MAX_IMAGE } else { MAX_FILE };
+        if f.size() as usize > limit {
+            return Err(format!("{name} is too large"));
         }
-        let mut s = String::new();
-        f.by_ref().take(MAX_FILE as u64 + 1).read_to_string(&mut s).map_err(|e| format!("{name}: {e}"))?;
-        out.insert(name, s);
+        let mut b = Vec::new();
+        f.by_ref().take(limit as u64 + 1).read_to_end(&mut b).map_err(|e| format!("{name}: {e}"))?;
+        add_part(&mut files, &mut assets, name, b)?;
     }
-    Ok(out)
+    Ok((files, assets))
+}
+
+fn write_part(dir: &Path, name: &str, bytes: &[u8]) -> Result<(), String> {
+    kind_of(name)?; // never outside the theme's own layout
+    let p = dir.join(name);
+    if let Some(d) = p.parent() {
+        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&p, bytes).map_err(|e| format!("{name}: {e}"))
 }
 
 pub fn write_zip(path: &Path, files: &BTreeMap<String, String>) -> Result<(), String> {
+    write_zip_parts(path, files, &BTreeMap::new())
+}
+
+pub fn write_zip_parts(path: &Path, files: &BTreeMap<String, String>, assets: &BTreeMap<String, Vec<u8>>) -> Result<(), String> {
     let mut buf = std::io::Cursor::new(Vec::new());
     {
         let mut w = zip::ZipWriter::new(&mut buf);
         let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-        for (name, text) in files {
+        for (name, bytes) in files.iter().map(|(n, t)| (n, t.as_bytes())).chain(assets.iter().map(|(n, b)| (n, b.as_slice()))) {
             w.start_file(name.as_str(), opts).map_err(|e| e.to_string())?;
-            w.write_all(text.as_bytes()).map_err(|e| e.to_string())?;
+            w.write_all(bytes).map_err(|e| e.to_string())?;
         }
         w.finish().map_err(|e| e.to_string())?;
     }
@@ -569,13 +838,42 @@ pub fn dir() -> std::path::PathBuf {
     stonedgem_profile::data_dir().join("hyperthemes")
 }
 
+/// Why an install stopped before writing anything.
+pub const NEEDS_POWER_CONFIRM: &str = "power-hypertheme";
+
 /// Install a `.hypertheme` file or folder; returns its file name in [`dir`].
+/// A power hypertheme is refused (with an error starting with
+/// [`NEEDS_POWER_CONFIRM`]) unless the user agreed: use [`install_with`].
 pub fn install(src: &Path) -> Result<String, String> {
+    install_with(src, false)
+}
+
+/// Install, allowing a power hypertheme when `allow_power` (the user
+/// confirmed that its QML and programs may run in the interface).
+pub fn install_with(src: &Path, allow_power: bool) -> Result<String, String> {
     let h = Hypertheme::open(src)?;
-    let slug: String = h.manifest.name.to_lowercase().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect::<String>().trim_matches('-').to_string();
-    let file = format!("{}.hypertheme", if slug.is_empty() { "theme".into() } else { slug });
+    if h.is_power() && !allow_power {
+        return Err(format!("{NEEDS_POWER_CONFIRM}: “{}” is a power hypertheme: its QML and programs run in the browser's interface", h.manifest.name));
+    }
+    let file = h.file_name();
     h.write(&dir().join(&file))?;
+    // A theme of the same name in the other kind is replaced.
+    let other = if h.is_power() { file.replace(".phypertheme", ".hypertheme") } else { file.replace(".hypertheme", ".phypertheme") };
+    let _ = std::fs::remove_file(dir().join(other));
     Ok(file)
+}
+
+/// Remove an installed theme. Built-in ones can't be removed.
+pub fn uninstall(file: &str) -> Result<(), String> {
+    check_name(file)?;
+    std::fs::remove_file(dir().join(file)).map_err(|e| format!("{file}: {e}"))
+}
+
+fn check_name(file: &str) -> Result<(), String> {
+    if file.is_empty() || file.contains(['/', '\\']) || file.starts_with('.') || !(file.ends_with(".hypertheme") || file.ends_with(".phypertheme")) {
+        return Err(format!("“{file}” isn't a hypertheme file name"));
+    }
+    Ok(())
 }
 
 /// Installed hyperthemes: (file name, name).
@@ -583,7 +881,7 @@ pub fn installed() -> Vec<(String, String)> {
     let Ok(rd) = std::fs::read_dir(dir()) else { return vec![] };
     let mut v: Vec<(String, String)> = rd
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|x| x == "hypertheme"))
+        .filter(|e| e.path().extension().is_some_and(|x| x == "hypertheme" || x == "phypertheme"))
         .filter_map(|e| Hypertheme::open(&e.path()).ok().map(|h| (e.file_name().to_string_lossy().to_string(), h.manifest.name)))
         .collect();
     v.sort_by(|a, b| a.1.cmp(&b.1));
@@ -607,9 +905,7 @@ pub fn builtins() -> Vec<(String, Hypertheme)> {
 
 /// An installed or built-in hypertheme by file name (installed ones win).
 pub fn load(file: &str) -> Result<Hypertheme, String> {
-    if file.is_empty() || file.contains(['/', '\\']) || file.starts_with('.') {
-        return Err(format!("“{file}” isn't a hypertheme file name"));
-    }
+    check_name(file)?;
     let path = dir().join(file);
     if path.exists() {
         return Hypertheme::open(&path);

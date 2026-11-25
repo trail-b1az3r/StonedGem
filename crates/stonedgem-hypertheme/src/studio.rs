@@ -51,8 +51,20 @@ pub fn register_power(it: &mut zsharpend::Interp, apply: Rc<dyn Fn(String)>) {
         preview(files, matches!(a.get(1), Some(V::Bool(true)))).map(|j| json_to_zxx(&j))
     });
     it.register("hypertheme_save", |_, a| {
+        // (name, files, base?): `base` is the installed theme the graph was
+        // opened from; its pictures (images/*) are kept.
         let name = a.first().map(|v| v.to_string()).unwrap_or_default();
-        save(&name, files_arg(a.get(1), "hypertheme_save(name, files)")?).map(|f| V::str(&f))
+        let base = a.get(2).map(|v| v.to_string()).filter(|b| !b.is_empty() && b != "null");
+        save_from(&name, files_arg(a.get(1), "hypertheme_save(name, files)")?, base.as_deref()).map(|f| V::str(&f))
+    });
+    it.register("hypertheme_open", |_, a| {
+        // file → { file, name, power, files: { name: text }, images: [names] }
+        let file = a.first().map(|v| v.to_string()).unwrap_or_default();
+        let h = crate::load(&file)?;
+        Ok(json_to_zxx(&json!({
+            "file": file, "name": h.manifest.name, "power": h.is_power(),
+            "files": h.files, "images": h.assets.keys().collect::<Vec<_>>(),
+        })))
     });
     it.register("hypertheme_apply", move |_, a| {
         apply(a.first().map(|v| v.to_string()).unwrap_or_default());
@@ -65,6 +77,7 @@ pub fn register_power(it: &mut zsharpend::Interp, apply: Rc<dyn Fn(String)>) {
 pub fn preview(mut files: BTreeMap<String, String>, dark: bool) -> Result<Json, String> {
     files.entry("hypertheme.toml".into()).or_insert_with(|| "[hypertheme]\nname = \"Preview\"\n".into());
     let h = Hypertheme::from_files(files)?;
+    // (A power theme's parts are previewed too: nothing runs here but its programs.)
     let r = h.resolve(dark);
     let mut css = r.css();
     if let Some(extra) = h.files.get("pages.css") {
@@ -84,17 +97,32 @@ pub fn zsg_preview(code: &str, w: u32, h: u32) -> Result<String, String> {
 }
 
 /// Write a hypertheme into the profile (checked first). Returns its file name.
-pub fn save(name: &str, mut files: BTreeMap<String, String>) -> Result<String, String> {
+pub fn save(name: &str, files: BTreeMap<String, String>) -> Result<String, String> {
+    save_from(name, files, None)
+}
+
+/// Save, keeping the pictures of the installed theme `base` (the one the
+/// Studio opened). A theme with power parts is saved as a .phypertheme:
+/// the user made it in the Studio, so no confirmation is asked.
+pub fn save_from(name: &str, mut files: BTreeMap<String, String>, base: Option<&str>) -> Result<String, String> {
     if name.trim().is_empty() {
         return Err("a hypertheme needs a name".into());
     }
+    let power = files.keys().any(|f| crate::POWER_FILES.contains(&f.as_str()));
     files.entry("hypertheme.toml".into()).or_insert_with(|| format!("[hypertheme]\nname = {}\n", serde_json::to_string(name).unwrap_or_default()));
-    let h = Hypertheme::from_files(files)?;
+    if power {
+        let m = files.get_mut("hypertheme.toml").expect("just set");
+        if !m.lines().any(|l| l.trim_start().starts_with("power")) {
+            *m = m.replacen("[hypertheme]\n", "[hypertheme]\npower = true\n", 1);
+        }
+    }
+    let assets = base.and_then(|b| crate::load(b).ok()).map(|h| h.assets).unwrap_or_default();
+    let h = Hypertheme::from_parts(files, assets)?;
     let dir = std::env::temp_dir().join(format!("stonedgem-ht-{}-{}", std::process::id(), name.len()));
-    let tmp = dir.join("theme.hypertheme");
+    let tmp = dir.join("theme.zip");
     let _ = std::fs::create_dir_all(&dir);
     h.write(&tmp)?;
-    let file = crate::install(&tmp);
+    let file = crate::install_with(&tmp, true);
     let _ = std::fs::remove_dir_all(dir);
     file
 }

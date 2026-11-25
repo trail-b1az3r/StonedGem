@@ -36,10 +36,11 @@ pub const POWER_API: &[(&str, &str)] = &[
     ("to_json", "to_json(value) -> string: JSON text"),
     ("from_json", "from_json(text) -> value"),
     ("zsg_preview", "zsg_preview(code, w, h) -> string: a .zsg `fragment preview` drawn, as a data: URL"),
-    ("hypertheme_save", "hypertheme_save(name, files) -> string: write a .hypertheme from a map of file → text; returns its file name"),
+    ("hypertheme_save", "hypertheme_save(name, files, base) -> string: write a .hypertheme (a .phypertheme if it has power parts) from a map of file → text, keeping the pictures of installed theme `base`; returns its file name"),
     ("hypertheme_apply", "hypertheme_apply(file): use an installed hypertheme"),
     ("hypertheme_resolve", "hypertheme_resolve(files, dark) -> map: the tokens, panels, CSS and warnings the browser would make of these parts"),
     ("hypertheme_list", "hypertheme_list() -> list: installed hyperthemes, [file, name]"),
+    ("hypertheme_open", "hypertheme_open(file) -> map: an installed or built-in theme's { file, name, power, files, images }"),
 ];
 
 pub fn has_script(dir: &Path) -> bool {
