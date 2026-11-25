@@ -26,7 +26,7 @@ fn parts(power: bool) -> (BTreeMap<String, String>, BTreeMap<String, Vec<u8>>) {
     add("global.qml", "import QtQuick\nItem { Rectangle { anchors.fill: parent; color: \"transparent\" } }\n");
     add("effect.qml", "import QtQuick\nimport QtQuick.Effects\nMultiEffect { property var source; saturation: -0.2 }\n");
     add("format-panel.qt", "import QtQuick\nQtObject { property int toolbarHeight: 52; property int tabHeight: 34 }\n");
-    add("styles.tsx", "export const button = { radius: 6, weight: 700 };\nexport default { card: { padding: 20 } };\n");
+    add("styles.tsx", "export const button = {\n    radius: 6,\n    weight: 700,\n};\nexport default { card: { padding: 20 } };\n");
     let mut a = BTreeMap::new();
     a.insert("images/sky.png".to_string(), png(8, 4));
     (f, a)
@@ -104,4 +104,20 @@ fn power_theme_resolves_installs_and_unpacks() {
     stonedgem_hypertheme::uninstall("aurora-glass.phypertheme").unwrap();
     assert!(stonedgem_hypertheme::uninstall("../x.hypertheme").is_err());
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn liquid_glass_is_built_in_and_see_through() {
+    let (file, h) = stonedgem_hypertheme::builtins().into_iter().find(|(_, h)| h.manifest.name == "Liquid Glass").expect("built in");
+    assert_eq!(file, "liquid-glass.phypertheme");
+    assert!(h.is_power());
+    for dark in [false, true] {
+        let r = h.resolve(dark);
+        assert!(r.warnings.is_empty(), "{dark}: {:?}", r.warnings);
+        assert_eq!(r.global["window"]["transparent"], true);
+        assert!(r.global["window"]["opacity"].as_f64().unwrap() < 0.3);
+        assert_eq!(r.flag("glass"), Some(true));
+    }
+    assert!(stonedgem_hypertheme::global_png(&h, 32, 16).unwrap().is_ok());
+    assert!(stonedgem_hypertheme::load("liquid-glass.phypertheme").is_ok());
 }

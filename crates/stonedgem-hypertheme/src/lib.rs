@@ -391,24 +391,33 @@ impl Hypertheme {
     pub fn styles_js(&self) -> Option<Result<String, String>> {
         let tsx = self.files.get("styles.tsx")?;
         Some(stonedgem_extensions::tscompile::transpile_tsx(tsx, "styles.tsx").map(|js| {
+            // Exports are assigned at the end, so a multi-line `export const`
+            // stays whole.
             let mut out = String::from("var exports = {};\n");
+            let mut names: Vec<String> = vec![];
+            let ident = |r: &str| r.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$')).next().unwrap_or("").to_string();
             for line in js.lines() {
                 let t = line.trim_start();
                 if let Some(rest) = t.strip_prefix("export default ") {
                     out.push_str("exports.default = ");
                     out.push_str(rest);
-                } else if let Some(rest) = t.strip_prefix("export const ").or_else(|| t.strip_prefix("export let ")).or_else(|| t.strip_prefix("export var ")) {
-                    let name = rest.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$')).next().unwrap_or("");
-                    out.push_str(&format!("var {rest}\nexports.{name} = {name};"));
+                } else if let Some((kw, rest)) = ["const ", "let ", "var "].iter().find_map(|k| t.strip_prefix("export ").and_then(|r| r.strip_prefix(k)).map(|r| (*k, r))) {
+                    names.push(ident(rest));
+                    out.push_str(kw);
+                    out.push_str(rest);
                 } else if let Some(rest) = t.strip_prefix("export function ") {
-                    let name = rest.split('(').next().unwrap_or("").trim();
-                    out.push_str(&format!("function {rest}\nexports.{name} = {name};"));
+                    names.push(ident(rest));
+                    out.push_str("function ");
+                    out.push_str(rest);
                 } else if t.starts_with("export {") || t.starts_with("import ") {
                     // Re-exports and imports aren't available in styles.tsx.
                 } else {
                     out.push_str(line);
                 }
                 out.push('\n');
+            }
+            for n in names.iter().filter(|n| !n.is_empty()) {
+                out.push_str(&format!("exports.{n} = {n};\n"));
             }
             out.push_str("return exports;\n");
             out
@@ -897,10 +906,14 @@ pub fn builtins() -> Vec<(String, Hypertheme)> {
     macro_rules! theme {
         ($dir:literal, [$($f:literal),*]) => {{
             let files: BTreeMap<String, String> = [$(($f.to_string(), include_str!(concat!("../themes/", $dir, "/", $f)).to_string())),*].into_iter().collect();
-            (format!("{}.hypertheme", $dir), Hypertheme::from_files(files).expect(concat!("built-in hypertheme ", $dir)))
+            let h = Hypertheme::from_files(files).expect(concat!("built-in hypertheme ", $dir));
+            (h.file_name(), h)
         }};
     }
-    vec![theme!("neubrutalism", ["hypertheme.toml", "tokens.json", "style.rs", "theme.zxx", "theme.zsp", "iced.toml", "pages.css", "start.tsx", "chrome.qml", "background.zsg", "graph.json"])]
+    vec![
+        theme!("neubrutalism", ["hypertheme.toml", "tokens.json", "style.rs", "theme.zxx", "theme.zsp", "iced.toml", "pages.css", "start.tsx", "chrome.qml", "background.zsg", "graph.json"]),
+        theme!("liquid-glass", ["hypertheme.toml", "tokens.json", "global.zxx", "global.zsg", "global.qml", "format-panel.qt", "styles.tsx"]),
+    ]
 }
 
 /// An installed or built-in hypertheme by file name (installed ones win).

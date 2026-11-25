@@ -54,6 +54,8 @@ A theme with `power = true` in `hypertheme.toml` can change more than tokens. It
 | `format-panel.qt` | QML `QtObject` whose properties set the interface's format: `toolbarHeight`, `tabHeight`, `sidebarWidth`, `fontSize`, `smallFont`, `titleSize`, `headlineSize`, `displaySize`, `cornerScale`, `spacing`. |
 | `styles.tsx` | TSX exporting per-component styles: `export const button = { radius: 4, weight: 700 }`, and likewise `card`, `field`, `tab`, `text`. A `css` export is added to pages. |
 
+`global.zxx` can also make the window itself see-through: `window: { transparent: true, opacity: 0.2, surfaces: 0.4 }`. `opacity` sets how much of the window's colour covers the desktop, and `surfaces` does the same for bars, cards and fields. OyNIx sets up the window's alpha channel at start-up for such a theme, and blurring what's behind is up to the compositor (Hyprland and KWin do it). The built-in **Liquid Glass** theme does this.
+
 StonedGem's own window reads a power theme's tokens, panels, `global.zxx` settings and pictures. The QML parts are for OyNIx.
 
 ## Tokens

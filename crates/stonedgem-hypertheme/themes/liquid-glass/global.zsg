@@ -1,0 +1,7 @@
+// The light on the glass: a bright sheen along the top edge and a faint
+// glint down both sides. Everything else is clear (alpha 0).
+fragment global(uv: vec2) -> color {
+    let top = smoothstep(0.10, 0.0, uv.y) * 0.10
+    let sides = (smoothstep(0.010, 0.0, uv.x) + smoothstep(0.990, 1.0, uv.x)) * 0.10
+    return vec4(1.0, 1.0, 1.0, top + sides)
+}

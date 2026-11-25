@@ -462,10 +462,7 @@ async function listThemes() {
     sel.innerHTML = '<option value="">Open theme…</option>' + (r.themes || []).map(t => `<option value="${esc(t[0])}">${esc(t[1])}${/\.phypertheme$/.test(t[0]) ? " (power)" : ""}</option>`).join("");
   } catch (e) { /* no bridge */ }
 }
-$("#open").addEventListener("change", async (e) => {
-  const file = e.target.value;
-  e.target.value = "";
-  if (!file) return;
+async function openTheme(file) {
   status("Opening " + file + "…");
   try {
     const r = await send({ kind: "open", file });
@@ -473,6 +470,11 @@ $("#open").addEventListener("change", async (e) => {
     const extra = (r.extras || []).length;
     status(`Opened ${r.name}` + (r.power ? " (power hypertheme)" : "") + (extra ? ` · ${extra} part(s) kept as they are` : "") + ((r.images || []).length ? ` · ${r.images.length} picture(s)` : ""));
   } catch (err) { status("Couldn't open it: " + err.message); }
+}
+$("#open").addEventListener("change", (e) => {
+  const file = e.target.value;
+  e.target.value = "";
+  if (file) openTheme(file);
 });
 $("#new").addEventListener("click", () => {
   load({ nodes: [{ id: "theme1", type: "theme", x: 520, y: 40, props: { mode: "light", name: "My theme", author: "", description: "", glass: false } }], wires: [] });
@@ -496,7 +498,10 @@ place();
   if (bridge) {
     try { const s = await chrome.storage.local.get("graph"); if (s && s.graph) g = JSON.parse(s.graph); } catch (e) { /* first run */ }
   }
-  load(g || TEMPLATE || { nodes: [], wires: [] });
+  // The browser can open a theme straight away: …/theme-studio.html#open=<file>
+  const asked = /^#open=(.+)$/.exec(location.hash);
+  if (asked) openTheme(decodeURIComponent(asked[1].replace(/\+/g, " ")));
+  else load(g || TEMPLATE || { nodes: [], wires: [] });
   listThemes();
 })();
 </script>
