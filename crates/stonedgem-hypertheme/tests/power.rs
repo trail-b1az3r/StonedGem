@@ -26,7 +26,7 @@ fn parts(power: bool) -> (BTreeMap<String, String>, BTreeMap<String, Vec<u8>>) {
     add("global.qml", "import QtQuick\nItem { Rectangle { anchors.fill: parent; color: \"transparent\" } }\n");
     add("effect.qml", "import QtQuick\nimport QtQuick.Effects\nMultiEffect { property var source; saturation: -0.2 }\n");
     add("format-panel.qt", "import QtQuick\nQtObject { property int toolbarHeight: 52; property int tabHeight: 34 }\n");
-    add("styles.tsx", "export const button = { radius: 6, weight: 700 };\nexport default { card: { padding: 20 } };\n");
+    add("styles.tsx", "export const button = {\n    radius: 6,\n    weight: 700,\n};\nexport default { card: { padding: 20 } };\n");
     let mut a = BTreeMap::new();
     a.insert("images/sky.png".to_string(), png(8, 4));
     (f, a)
