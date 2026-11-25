@@ -906,10 +906,14 @@ pub fn builtins() -> Vec<(String, Hypertheme)> {
     macro_rules! theme {
         ($dir:literal, [$($f:literal),*]) => {{
             let files: BTreeMap<String, String> = [$(($f.to_string(), include_str!(concat!("../themes/", $dir, "/", $f)).to_string())),*].into_iter().collect();
-            (format!("{}.hypertheme", $dir), Hypertheme::from_files(files).expect(concat!("built-in hypertheme ", $dir)))
+            let h = Hypertheme::from_files(files).expect(concat!("built-in hypertheme ", $dir));
+            (h.file_name(), h)
         }};
     }
-    vec![theme!("neubrutalism", ["hypertheme.toml", "tokens.json", "style.rs", "theme.zxx", "theme.zsp", "iced.toml", "pages.css", "start.tsx", "chrome.qml", "background.zsg", "graph.json"])]
+    vec![
+        theme!("neubrutalism", ["hypertheme.toml", "tokens.json", "style.rs", "theme.zxx", "theme.zsp", "iced.toml", "pages.css", "start.tsx", "chrome.qml", "background.zsg", "graph.json"]),
+        theme!("liquid-glass", ["hypertheme.toml", "tokens.json", "global.zxx", "global.zsg", "global.qml", "format-panel.qt", "styles.tsx"]),
+    ]
 }
 
 /// An installed or built-in hypertheme by file name (installed ones win).

@@ -1,0 +1,8 @@
+import QtQuick
+
+// Liquid Glass's format: rounder, slightly roomier.
+QtObject {
+    property real cornerScale: 1.35
+    property int toolbarHeight: 56
+    property int tabHeight: 36
+}

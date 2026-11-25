@@ -1,0 +1,11 @@
+// Liquid Glass: the window is see-through. `opacity` is how much of the
+// window's own colour covers the desktop; `surfaces` the same for bars,
+// cards and fields. The glass on top of the page (menus, popovers) is
+// clear too, tinted just enough to read.
+fn global(dark) {
+    return {
+        window: { transparent: true, opacity: dark ? 0.16 : 0.22, surfaces: dark ? 0.36 : 0.44 },
+        glass: { blur: 26, tint: dark ? "#20242e" : "#ffffff", opacity: dark ? 0.34 : 0.46 },
+        overlay_opacity: 1
+    }
+}

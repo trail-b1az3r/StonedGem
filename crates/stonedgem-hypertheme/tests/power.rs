@@ -105,3 +105,19 @@ fn power_theme_resolves_installs_and_unpacks() {
     assert!(stonedgem_hypertheme::uninstall("../x.hypertheme").is_err());
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn liquid_glass_is_built_in_and_see_through() {
+    let (file, h) = stonedgem_hypertheme::builtins().into_iter().find(|(_, h)| h.manifest.name == "Liquid Glass").expect("built in");
+    assert_eq!(file, "liquid-glass.phypertheme");
+    assert!(h.is_power());
+    for dark in [false, true] {
+        let r = h.resolve(dark);
+        assert!(r.warnings.is_empty(), "{dark}: {:?}", r.warnings);
+        assert_eq!(r.global["window"]["transparent"], true);
+        assert!(r.global["window"]["opacity"].as_f64().unwrap() < 0.3);
+        assert_eq!(r.flag("glass"), Some(true));
+    }
+    assert!(stonedgem_hypertheme::global_png(&h, 32, 16).unwrap().is_ok());
+    assert!(stonedgem_hypertheme::load("liquid-glass.phypertheme").is_ok());
+}

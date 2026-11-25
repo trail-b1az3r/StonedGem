@@ -1,0 +1,7 @@
+[hypertheme]
+name = "Liquid Glass"
+version = "1.0.0"
+author = "OyNIx"
+description = "True Liquid Glass: the window itself is see-through, so your desktop shows behind clear glass bars with bright rims. With a blurring compositor (Hyprland, KWin) it frosts."
+modes = "both"
+power = true
