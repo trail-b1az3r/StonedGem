@@ -90,6 +90,7 @@ header label input { width: auto; }
 
 #parts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 #parts button { font-size: 11px; padding: 2px 7px; }
+header select { width: auto; max-width: 200px; }
 #code { display: none; position: fixed; inset: 60px 360px 20px 190px; background: var(--ed-panel); border: 1px solid var(--ed-line); border-radius: 10px; box-shadow: 0 20px 60px #000a; flex-direction: column; z-index: 5; }
 #code.open { display: flex; }
 #code header { border-radius: 10px 10px 0 0; }
@@ -105,6 +106,7 @@ header label input { width: auto; }
     <button id="template">Neubrutalism</button>
     <button id="import">Import graph…</button>
     <button id="export">Export graph</button>
+    <select id="open" title="Open an installed or built-in theme"><option value="">Open theme…</option></select>
     <label><input type="checkbox" id="dark"> Dark preview</label>
     <span class="grow"></span>
     <span id="status">Starting…</span>
@@ -429,11 +431,16 @@ async function save(use) {
   try {
     const r = await send({ kind: use ? "apply" : "save", graph });
     status(`Saved as ${r.file}` + (use ? " and in use" : ""));
+    listThemes();
   } catch (e) { status("Not saved: " + e.message); $("#warnings").textContent = e.message; }
 }
 
 function load(g) {
   graph = { version: 1, nodes: g.nodes || [], wires: g.wires || [] };
+  // A theme opened from the browser keeps the parts the Studio doesn't
+  // make (power parts, modules…) and where it came from (its pictures).
+  if (g.extras) graph.extras = g.extras;
+  if (g.base) graph.base = g.base;
   for (const n of graph.nodes) { n.props = n.props || {}; }
   selected = null; values = {}; thumbs = {};
   render(); compile();
@@ -448,6 +455,25 @@ for (const [type, k] of Object.entries(KINDS)) {
   b.addEventListener("click", () => addNode(type));
   $("#palette").appendChild(b);
 }
+async function listThemes() {
+  try {
+    const r = await send({ kind: "list" });
+    const sel = $("#open");
+    sel.innerHTML = '<option value="">Open theme…</option>' + (r.themes || []).map(t => `<option value="${esc(t[0])}">${esc(t[1])}${/\.phypertheme$/.test(t[0]) ? " (power)" : ""}</option>`).join("");
+  } catch (e) { /* no bridge */ }
+}
+$("#open").addEventListener("change", async (e) => {
+  const file = e.target.value;
+  e.target.value = "";
+  if (!file) return;
+  status("Opening " + file + "…");
+  try {
+    const r = await send({ kind: "open", file });
+    load(r.graph);
+    const extra = (r.extras || []).length;
+    status(`Opened ${r.name}` + (r.power ? " (power hypertheme)" : "") + (extra ? ` · ${extra} part(s) kept as they are` : "") + ((r.images || []).length ? ` · ${r.images.length} picture(s)` : ""));
+  } catch (err) { status("Couldn't open it: " + err.message); }
+});
 $("#new").addEventListener("click", () => {
   load({ nodes: [{ id: "theme1", type: "theme", x: 520, y: 40, props: { mode: "light", name: "My theme", author: "", description: "", glass: false } }], wires: [] });
 });
@@ -471,6 +497,7 @@ place();
     try { const s = await chrome.storage.local.get("graph"); if (s && s.graph) g = JSON.parse(s.graph); } catch (e) { /* first run */ }
   }
   load(g || TEMPLATE || { nodes: [], wires: [] });
+  listThemes();
 })();
 </script>
 </body>

@@ -394,7 +394,110 @@ fn generate(graph) {
         "chrome.qml": chrome_qml(t),
     }
     if t["light"]["shader"] != "" { files["background.zsg"] = t["light"]["shader"] }
+    // Parts the Studio doesn't make (a power theme's QML and programs,
+    // modules, headers…) come along from the theme it opened.
+    let extras = get(graph, "extras", {})
+    let power = false
+    for k in keys(extras) {
+        if !has(files, k) { files[k] = extras[k] }
+        if contains(POWER_FILES, k) { power = true }
+    }
+    if power {
+        files["hypertheme.toml"] = replace(files["hypertheme.toml"], "[hypertheme]\n", "[hypertheme]\npower = true\n")
+    }
     return { name: t["name"], files: files }
+}
+
+const POWER_FILES = ["global.zxx", "global.zsg", "global.qml", "effect.qml", "format-panel.qt", "styles.tsx"]
+const GENERATED = ["hypertheme.toml", "tokens.json", "style.rs", "theme.zxx", "theme.zsp", "iced.toml", "pages.css", "start.tsx", "chrome.qml", "background.zsg", "graph.json"]
+
+// ── Opening a theme that has no graph: one built from its tokens ────────
+
+fn node(nodes, id, kind, x, y, props) {
+    push(nodes, { id: id, type: kind, x: x, y: y, props: props })
+}
+
+fn wire(wires, src, dst, port) {
+    push(wires, { from: src, to: dst, in: port })
+}
+
+// One theme node (light or dark) and what feeds it, from resolved tokens.
+fn theme_part(nodes, wires, mode, tokens, panels, x0, meta) {
+    let tid = mode
+    let props = { mode: mode }
+    if mode == "light" {
+        props = { mode: "light", name: meta["name"], author: meta["author"], description: meta["description"], glass: get(tokens, "glass", false) == true }
+    }
+    node(nodes, tid, "theme", x0 + 600, 40, props)
+    let y = 40
+    for k in COLOR_TOKENS {
+        if has(tokens, k) && type(tokens[k]) == "string" {
+            let id = "${mode}_${k}"
+            node(nodes, id, "color", x0, y, { value: tokens[k] })
+            wire(wires, id, tid, k)
+            y += 90
+        }
+    }
+    if mode == "light" {
+        let y2 = 40
+        for k in NUMBER_TOKENS {
+            if has(tokens, k) {
+                let id = "${mode}_${k}"
+                node(nodes, id, "number", x0 + 300, y2, { value: float(tokens[k]) })
+                wire(wires, id, tid, k)
+                y2 += 80
+            }
+        }
+        if has(tokens, "font_family") {
+            node(nodes, "font", "font", x0 + 300, y2, { family: tokens["font_family"], weight: float(get(tokens, "font_weight", 400)) })
+            wire(wires, "font", tid, "font")
+        }
+    }
+    let py = y + 40
+    for p in PANELS {
+        if has(panels, p) {
+            let id = "${mode}_panel_${p}"
+            let props = { panel: p }
+            for k in keys(panels[p]) { props[k] = panels[p][k] }
+            node(nodes, id, "panel", x0 + 300, py, props)
+            wire(wires, id, tid, "panels")
+            py += 215
+        }
+    }
+}
+
+fn graph_from_theme(opened) {
+    let files = opened["files"]
+    let light = hypertheme_resolve(files, false)
+    let dark = hypertheme_resolve(files, true)
+    let meta = { name: opened["name"], author: "", description: "" }
+    let nodes = []
+    let wires = []
+    theme_part(nodes, wires, "light", light["tokens"], light["panels"], 40, meta)
+    // Dark mode: only the colours that differ.
+    let dt = {}
+    for k in COLOR_TOKENS {
+        if has(dark["tokens"], k) && get(light["tokens"], k, "") != dark["tokens"][k] { dt[k] = dark["tokens"][k] }
+    }
+    if len(dt) > 0 { theme_part(nodes, wires, "dark", dt, {}, 1000, meta) }
+    if has(files, "background.zsg") {
+        node(nodes, "backdrop", "shader", 40, 1000, { code: files["background.zsg"] })
+        wire(wires, "backdrop", "light", "backdrop")
+    }
+    return { version: 1, nodes: nodes, wires: wires }
+}
+
+fn open_theme(file) {
+    let opened = hypertheme_open(file)
+    let files = opened["files"]
+    let graph = has(files, "graph.json") ? from_json(files["graph.json"]) : graph_from_theme(opened)
+    let extras = {}
+    for k in keys(files) {
+        if !contains(GENERATED, k) { extras[k] = files[k] }
+    }
+    graph["extras"] = extras
+    graph["base"] = file
+    return { graph: graph, name: opened["name"], power: opened["power"], images: opened["images"], extras: keys(extras) }
 }
 
 // What every node gives (the page shows colours and numbers on the nodes).
@@ -420,6 +523,9 @@ on message (msg, sender) {
     if kind == "list" {
         return { themes: hypertheme_list() }
     }
+    if kind == "open" {
+        return open_theme(msg["file"])
+    }
     let out = generate(msg["graph"])
     let files = out["files"]
     if kind == "compile" {
@@ -427,7 +533,7 @@ on message (msg, sender) {
         return { name: out["name"], files: files, css: preview["css"], tokens: preview["tokens"], warnings: preview["warnings"], values: node_values(msg["graph"]) }
     }
     files["graph.json"] = to_json(msg["graph"])
-    let file = hypertheme_save(out["name"], files)
+    let file = hypertheme_save(out["name"], files, get(msg["graph"], "base", ""))
     if kind == "apply" {
         hypertheme_apply(file)
         notify("Theme Studio: using ${out["name"]}")

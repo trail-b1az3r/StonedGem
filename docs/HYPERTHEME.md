@@ -31,6 +31,31 @@ description = "Cream paper, loud colour, thick ink borders and hard offset shado
 modes = "both"        # light, dark or both
 ```
 
+Theme programs can also use code kept beside them:
+
+| Folder | What it holds |
+|---|---|
+| `modules/*.zxx` | Zsharpend modules: `import palette` finds `modules/palette.zxx` |
+| `include/*.zsx` | Z#++ headers, for `#include` / `import "include/x.zsx"` |
+| `images/*` | pictures (PNG, JPEG, WebP, GIF, SVG), such as background images |
+
+The programs read only the theme's own files.
+
+## Power hyperthemes (`.phypertheme`)
+
+A theme with `power = true` in `hypertheme.toml` can change more than tokens. It installs as `.phypertheme`, and because its QML runs inside the browser's interface, installing one asks you first, as a power extension does.
+
+| File | What it does (OyNIx) |
+|---|---|
+| `global.zxx` | `fn global(dark)` returns global settings: `glass` (`blur`, `tint`, `opacity`), `background_image` (a path under `images/`), `overlay_opacity`, `motion`, and anything `effect.qml` or `global.qml` reads (as `theme.global`). It may also return `tokens` and `panels`, merged like the other parts. |
+| `global.zsg` | `fragment global(uv: vec2) -> color`, laid over the whole window. Its alpha decides how much shows. |
+| `global.qml` | QML layers over the whole interface (or under it, with `property bool behind: true`): glass panes, frames, particles. It gets `theme` and `ui`, and is not interactive. |
+| `effect.qml` | A layer effect applied to the whole rendered interface, for colour grading, blur, glow or distortion. Its root gets `source` (the interface) as a `layer.effect` does. |
+| `format-panel.qt` | QML `QtObject` whose properties set the interface's format: `toolbarHeight`, `tabHeight`, `sidebarWidth`, `fontSize`, `smallFont`, `titleSize`, `headlineSize`, `displaySize`, `cornerScale`, `spacing`. |
+| `styles.tsx` | TSX exporting per-component styles: `export const button = { radius: 4, weight: 700 }`, and likewise `card`, `field`, `tab`, `text`. A `css` export is added to pages. |
+
+StonedGem's own window reads a power theme's tokens, panels, `global.zxx` settings and pictures. The QML parts are for OyNIx.
+
 ## Tokens
 
 | Kind | Tokens |
@@ -72,6 +97,9 @@ The **Install** field takes a `.hypertheme` file or folder. Installed
 themes live in the profile's `hyperthemes/` folder.
 
 ## Theme Studio
+
+**Open theme…** lists the built-in and installed themes, power themes included. A theme with a `graph.json` opens as its graph. Any other theme opens as a graph built from its resolved tokens. Parts the Studio doesn't generate (a power theme's QML and programs, its modules, headers and pictures) are kept and saved back with the theme.
+
 
 **Settings › Appearance › Open Theme Studio** (or Theme Studio in the menu)
 opens a full-page node editor. It's a built-in **power extension**: its page
