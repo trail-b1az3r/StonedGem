@@ -1,0 +1,12 @@
+// Light moving through the glass: a soft sheen sweeps across the pane
+// once a loop, over faint, slowly turning caustics. Mostly clear.
+// `t` runs from 0 to 1 once per loop, so everything returns to its start.
+fragment animations(uv: vec2, uniform t: float) -> color {
+    let tau = 6.2831853
+    let d = uv.x * 0.8 + uv.y * 0.6 - (t * 2.4 - 0.7)
+    let band = smoothstep(0.22, 0.0, abs(d)) * 0.10
+    let w1 = sin(uv.x * 9.0 + sin(uv.y * 6.0 + t * tau) * 1.6 + t * tau)
+    let w2 = sin(uv.y * 11.0 + sin(uv.x * 7.0 - t * tau) * 1.4 - t * tau)
+    let caustic = smoothstep(0.82, 1.0, w1 * w2) * 0.05
+    return vec4(1.0, 1.0, 1.0, band + caustic)
+}

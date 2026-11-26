@@ -121,3 +121,27 @@ fn liquid_glass_is_built_in_and_see_through() {
     assert!(stonedgem_hypertheme::global_png(&h, 32, 16).unwrap().is_ok());
     assert!(stonedgem_hypertheme::load("liquid-glass.phypertheme").is_ok());
 }
+
+#[test]
+fn animation_parts() {
+    let (_, h) = stonedgem_hypertheme::builtins().into_iter().find(|(f, _)| f == "liquid-glass.phypertheme").expect("built in");
+    h.check().expect("Liquid Glass checks");
+    for dark in [false, true] {
+        let r = h.resolve(dark);
+        assert!(r.warnings.is_empty(), "{dark}: {:?}", r.warnings);
+        assert_eq!(r.animate["page"]["enter"], "rise");
+        assert_eq!(r.animate["shader"]["frames"], 36);
+    }
+    // The sheet: frames side by side, in one PNG.
+    let t0 = std::time::Instant::now();
+    let png = stonedgem_hypertheme::animations_sheet(&h, 40, 25, 8).unwrap().expect("sheet");
+    eprintln!("8 frames of 40x25 in {:?}", t0.elapsed());
+    assert_eq!(&png[1..4], b"PNG");
+    let be = |i: usize| u32::from_be_bytes([png[i], png[i + 1], png[i + 2], png[i + 3]]);
+    assert_eq!((be(16), be(20)), (320, 25));
+    // A broken animations.zsg is refused when installed.
+    let (mut files, assets) = (h.files.clone(), h.assets.clone());
+    files.insert("animations.zsg".into(), "fragment wrong(uv: vec2) -> color { return vec4(1.0) }".into());
+    let err = Hypertheme::from_parts(files, assets).and_then(|b| b.check()).unwrap_err();
+    assert!(err.contains("animations.zsg"), "{err}");
+}

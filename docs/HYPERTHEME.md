@@ -53,8 +53,13 @@ A theme with `power = true` in `hypertheme.toml` can change more than tokens. It
 | `effect.qml` | A layer effect applied to the whole rendered interface, for colour grading, blur, glow or distortion. Its root gets `source` (the interface) as a `layer.effect` does. |
 | `format-panel.qt` | QML `QtObject` whose properties set the interface's format: `toolbarHeight`, `tabHeight`, `sidebarWidth`, `fontSize`, `smallFont`, `titleSize`, `headlineSize`, `displaySize`, `cornerScale`, `spacing`. |
 | `styles.tsx` | TSX exporting per-component styles: `export const button = { radius: 4, weight: 700 }`, and likewise `card`, `field`, `tab`, `text`. A `css` export is added to pages. |
+| `animate.zxx` | `fn animate(dark)` returns the interface's motion: `speed` (1 is normal, 0 turns motion off), `easing` (a Qt easing name such as `"OutCubic"`), `hover: { scale }`, `press: { scale }`, `page: { enter, duration }` (`enter` is `"fade"`, `"rise"`, `"zoom"`, `"slide"` or `"none"`), `tabs: { open, duration }` (`"pop"`, `"slide"`, `"fade"`, `"none"`), `menus: { open, duration }` (`"scale"`, `"fade"`, `"drop"`, `"none"`), and `shader: { duration, frames, width, height, opacity }` for `animations.zsg`. Durations are in milliseconds. |
+| `animations.zsg` | `fragment animations(uv: vec2, uniform t: float) -> color`, looped over the whole window. `t` runs from 0 to 1 once per loop, so a loop that ends where it starts is seamless. It's drawn once into a sprite sheet (`shader.frames` frames of `shader.width`×`shader.height`, scaled up) and played back. |
+| `animations.qml` | QML animations: a layer over the interface (not interactive) that gets `theme`, `ui`, `window` and `anim` (what `animate.zxx` returned). OyNIx calls its functions when things happen, if it has them: `pageShown(item)`, `tabOpened(item)`, `menuOpened(item)`, `navigated(url)`. |
 
-`global.zxx` can also make the window itself see-through: `window: { transparent: true, opacity: 0.2, surfaces: 0.4 }`. `opacity` sets how much of the window's colour covers the desktop, and `surfaces` does the same for bars, cards and fields. OyNIx sets up the window's alpha channel at start-up for such a theme, and blurring what's behind is up to the compositor (Hyprland and KWin do it). The built-in **Liquid Glass** theme does this.
+`global.zxx`'s `glass: { blur, tint, opacity }` is the material of every glass element in OyNIx: the toolbar and tab strip, fields, buttons, cards and menus. The tint is mixed into each element's colour, `opacity` is how much of the element covers what's behind it, and `blur` frosts what shows through menus and popovers.
+
+`global.zxx` can also make the window itself see-through: `window: { transparent: true, opacity: 0.2, surfaces: 0.4 }`. `opacity` sets how much of the window's colour covers the desktop, and `surfaces` does the same for bars, cards and fields. OyNIx gives its windows an alpha channel, so the theme applies as soon as it's chosen. Blurring the desktop behind the window is up to the compositor: Hyprland and KWin can do it, and picom does with a blur method configured. The built-in **Liquid Glass** theme does all of this, with animations.
 
 StonedGem's own window reads a power theme's tokens, panels, `global.zxx` settings and pictures. The QML parts are for OyNIx.
 
@@ -124,7 +129,7 @@ The script gets these power-extension functions (see
 - `to_json`, `from_json`
 - `zsg_preview(code, w, h)`
 - `hypertheme_resolve(files, dark)`
-- `hypertheme_save(name, files)`
+- `hypertheme_save(name, files, base)`
 - `hypertheme_apply(file)`
 - `hypertheme_list()`
 
