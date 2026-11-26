@@ -38,10 +38,13 @@
 //! | `global.zsg` | a fragment shader (`fragment global(uv: vec2) -> color`) laid over the whole window (its alpha decides how much shows) |
 //! | `global.qml` | **QML** layers over (or under) the whole interface: glass, frames, particles… |
 //! | `effect.qml` | a **QML** layer effect applied to the whole interface (it receives the rendered UI as `source`): colour grading, blur, glow, distortion… |
+//! | `animate.zxx` | a **Zsharpend** program: `fn animate(dark)` returns the interface's motion: speed, easing, hover and press, page, tab and menu transitions, and the animated shader's timing |
+//! | `animations.zsg` | an animated fragment shader, `fragment animations(uv: vec2, uniform t: float) -> color`, looped over the whole window (`t` runs from 0 to 1 once per loop) |
+//! | `animations.qml` | **QML** animations: a layer over the interface whose functions (`pageShown`, `tabOpened`, `menuOpened`, `navigated`) run when those happen |
 //! | `format-panel.qt` | **QML** (`QtObject { property int toolbarHeight: … }`) setting the interface's format: bar and tab heights, font sizes, spacing, corner scale |
 //! | `styles.tsx` | **TSX** exporting per-component styles (`export const button = { radius: 4, weight: 700 }`) and CSS for pages |
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
 use std::path::Path;
 
@@ -56,7 +59,7 @@ pub const FILES: &[&str] = &[
     "hypertheme.toml", "tokens.json", "style.rs", "theme.zsp", "theme.zxx", "iced.toml", "pages.css", "start.tsx", "chrome.qml", "background.zsg", "graph.json",
 ];
 /// The parts only a power hypertheme (`.phypertheme`) may hold.
-pub const POWER_FILES: &[&str] = &["global.zxx", "global.zsg", "global.qml", "effect.qml", "format-panel.qt", "styles.tsx"];
+pub const POWER_FILES: &[&str] = &["global.zxx", "global.zsg", "global.qml", "effect.qml", "format-panel.qt", "styles.tsx", "animate.zxx", "animations.zsg", "animations.qml"];
 /// Picture types allowed under `images/`.
 pub const IMAGE_TYPES: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "svg"];
 const MAX_FILE: usize = 1 << 20;
@@ -160,6 +163,8 @@ pub struct Resolved {
     pub warnings: Vec<String>,
     /// Power hyperthemes: what `global.zxx`'s `global(dark)` returned.
     pub global: Map<String, Json>,
+    /// Power hyperthemes: what `animate.zxx`'s `animate(dark)` returned.
+    pub animate: Map<String, Json>,
 }
 
 impl Hypertheme {
@@ -272,10 +277,20 @@ impl Hypertheme {
                 return Err("global.zsg: needs `fragment global(uv: vec2) -> color`".into());
             }
         }
+        if let Some(t) = self.files.get("animations.zsg") {
+            let m = stonedgem_zsharp::zsg::Module::parse(t).map_err(|e| format!("animations.zsg: {e}"))?;
+            if m.entry("animations").is_none() {
+                return Err("animations.zsg: needs `fragment animations(uv: vec2, uniform t: float) -> color`".into());
+            }
+            // Every frame must draw: try the start, middle and end of the loop.
+            for t in [0.0f32, 0.5, 0.999] {
+                m.shade("animations", [0.5, 0.5], [64.0, 64.0], &HashMap::from([("t".to_string(), t)])).map_err(|e| format!("animations.zsg (t = {t}): {e}"))?;
+            }
+        }
         if let Some(t) = self.files.get("styles.tsx") {
             stonedgem_extensions::tscompile::transpile_tsx(t, "styles.tsx")?;
         }
-        for name in ["global.qml", "effect.qml", "format-panel.qt", "chrome.qml"] {
+        for name in ["global.qml", "effect.qml", "animations.qml", "format-panel.qt", "chrome.qml"] {
             if let Some(t) = self.files.get(name) {
                 // Qt checks QML when it loads it; here only that it looks like QML.
                 if !t.lines().any(|l| l.trim_start().starts_with("import ")) || !t.contains('{') {
@@ -343,6 +358,14 @@ impl Hypertheme {
                 }
                 Ok(other) => r.warnings.push(format!("global.zxx: global() returned {other}, not a map")),
                 Err(e) => r.warnings.push(format!("global.zxx: {e}")),
+            }
+        }
+        // animate.zxx: the interface's motion.
+        if self.is_power() && self.files.contains_key("animate.zxx") {
+            match run_zxx(&self.reader(), "animate.zxx", "animate", dark) {
+                Ok(Json::Object(a)) => r.animate = a,
+                Ok(other) => r.warnings.push(format!("animate.zxx: animate() returned {other}, not a map")),
+                Err(e) => r.warnings.push(format!("animate.zxx: {e}")),
             }
         }
         if let Some(t) = self.files.get("iced.toml") {
@@ -678,6 +701,29 @@ pub fn global_png(h: &Hypertheme, w: u32, ht: u32) -> Option<Result<Vec<u8>, Str
     shade_png(h.files.get("global.zsg")?, "global", w, ht)
 }
 
+/// A power theme's `animations.zsg` as a looping sprite sheet: `frames`
+/// frames of `w`×`h` side by side (frame `i` drawn with `t = i / frames`),
+/// as one PNG. The shader runs on the CPU, so keep it small and scale it up.
+pub fn animations_sheet(h: &Hypertheme, w: u32, ht: u32, frames: u32) -> Option<Result<Vec<u8>, String>> {
+    if !h.is_power() {
+        return None;
+    }
+    let src = h.files.get("animations.zsg")?;
+    Some((|| {
+        let (w, ht, frames) = (w.clamp(1, 1024) as i32, ht.clamp(1, 1024) as i32, frames.clamp(1, 120) as i32);
+        if w as i64 * frames as i64 > 16384 {
+            return Err("animations.zsg: the sheet would be wider than 16384 pixels; use fewer frames or a smaller size".into());
+        }
+        let m = stonedgem_zsharp::zsg::Module::parse(src)?;
+        let c = stonedgem_zsharp::canvas::Canvas::new((w * frames) as i64, ht as i64)?;
+        for i in 0..frames {
+            let u = HashMap::from([("t".to_string(), i as f32 / frames as f32)]);
+            c.shade(&m, "animations", (i * w, 0, w, ht), &u)?;
+        }
+        c.png()
+    })())
+}
+
 fn shade_png(src: &str, entry: &str, w: u32, ht: u32) -> Option<Result<Vec<u8>, String>> {
     Some((|| {
         let m = stonedgem_zsharp::zsg::Module::parse(src)?;
@@ -912,7 +958,7 @@ pub fn builtins() -> Vec<(String, Hypertheme)> {
     }
     vec![
         theme!("neubrutalism", ["hypertheme.toml", "tokens.json", "style.rs", "theme.zxx", "theme.zsp", "iced.toml", "pages.css", "start.tsx", "chrome.qml", "background.zsg", "graph.json"]),
-        theme!("liquid-glass", ["hypertheme.toml", "tokens.json", "global.zxx", "global.zsg", "global.qml", "format-panel.qt", "styles.tsx"]),
+        theme!("liquid-glass", ["hypertheme.toml", "tokens.json", "global.zxx", "global.zsg", "global.qml", "format-panel.qt", "styles.tsx", "animate.zxx", "animations.zsg", "animations.qml"]),
     ]
 }
 

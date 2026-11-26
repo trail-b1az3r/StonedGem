@@ -408,7 +408,7 @@ fn generate(graph) {
     return { name: t["name"], files: files }
 }
 
-const POWER_FILES = ["global.zxx", "global.zsg", "global.qml", "effect.qml", "format-panel.qt", "styles.tsx"]
+const POWER_FILES = ["global.zxx", "global.zsg", "global.qml", "effect.qml", "format-panel.qt", "styles.tsx", "animate.zxx", "animations.zsg", "animations.qml"]
 const GENERATED = ["hypertheme.toml", "tokens.json", "style.rs", "theme.zxx", "theme.zsp", "iced.toml", "pages.css", "start.tsx", "chrome.qml", "background.zsg", "graph.json"]
 
 // ── Opening a theme that has no graph: one built from its tokens ────────

@@ -1,0 +1,15 @@
+// Liquid Glass motion: quick and soft, like light moving through glass.
+// OyNIx reads these settings; durations are in milliseconds.
+fn animate(dark) {
+    return {
+        speed: 1.0,
+        easing: "OutCubic",
+        hover: { scale: 1.03 },
+        press: { scale: 0.95 },
+        page: { enter: "rise", duration: 280 },
+        tabs: { open: "pop", duration: 220 },
+        menus: { open: "scale", duration: 180 },
+        // animations.zsg: one loop every 9 s, drawn as 36 frames.
+        shader: { duration: 9000, frames: 36, width: 320, height: 200, opacity: dark ? 0.55 : 0.8 }
+    }
+}
